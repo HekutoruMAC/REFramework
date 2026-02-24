@@ -5,7 +5,7 @@ import os
 import ctypes
 import shutil
 
-def symlink_main(gamedir=None, bindir="build/bin", just_copy=False):
+def symlink_main(gamedir=None, bindir="build/bin", just_copy=False, skip_test_scripts=False):
     if gamedir is None:
         print("Usage: make_symlinks.py --gamedir=<path to game directory>")
         return
@@ -25,52 +25,56 @@ def symlink_main(gamedir=None, bindir="build/bin", just_copy=False):
         print(f"Error: Directory {bindir} does not exist")
         return
     
-    source_dir_files = [
-        "Test/Test/Test.cs",
-        "Test/Test/TestDMC5.cs",
-        "Test/Test/TestRE2.cs",
-        "Test/Test/TestRE4.cs",
-        "Test/Test/TestMHWilds.cs",
-        "Test/Test/TestMHWildsWebAPI.cs",
-        "Test/Test/ObjectExplorer.cs",
-    ]
+    # Always create the source directory so users have a place to drop scripts
+    os.makedirs(os.path.join(gamedir, "reframework", "plugins", "source"), exist_ok=True)
 
-    for file in source_dir_files:
-        src = os.path.abspath(file)
-        filename_only = os.path.basename(file)
-        dst = os.path.join(gamedir, "reframework", "plugins", "source", filename_only)
-        os.makedirs(os.path.dirname(dst), exist_ok=True)
-        try:
-            os.remove(dst)
-        except FileNotFoundError:
-            pass
+    if not skip_test_scripts:
+        source_dir_files = [
+            "Test/Test/Test.cs",
+            "Test/Test/TestDMC5.cs",
+            "Test/Test/TestRE2.cs",
+            "Test/Test/TestRE4.cs",
+            "Test/Test/TestMHWilds.cs",
+            "Test/Test/TestMHWildsWebAPI.cs",
+            "Test/Test/ObjectExplorer.cs",
+        ]
 
-        if just_copy == True:
-            shutil.copy(src, dst)
-        else:
-            os.symlink(src, dst)
+        for file in source_dir_files:
+            src = os.path.abspath(file)
+            filename_only = os.path.basename(file)
+            dst = os.path.join(gamedir, "reframework", "plugins", "source", filename_only)
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            try:
+                os.remove(dst)
+            except FileNotFoundError:
+                pass
 
-    source_dir_dirs = [
-        "Test/Test/WebAPI",
-    ]
+            if just_copy == True:
+                shutil.copy(src, dst)
+            else:
+                os.symlink(src, dst)
 
-    for dir in source_dir_dirs:
-        src = os.path.abspath(dir)
-        dirname_only = os.path.basename(dir)
-        dst = os.path.join(gamedir, "reframework", "plugins", "source", dirname_only)
-        try:
-            os.remove(dst)  # remove symlink if exists
-        except FileNotFoundError:
-            pass
-        try:
-            shutil.rmtree(dst)  # remove real dir if exists
-        except FileNotFoundError:
-            pass
+        source_dir_dirs = [
+            "Test/Test/WebAPI",
+        ]
 
-        if just_copy == True:
-            shutil.copytree(src, dst)
-        else:
-            os.symlink(src, dst, target_is_directory=True)
+        for dir in source_dir_dirs:
+            src = os.path.abspath(dir)
+            dirname_only = os.path.basename(dir)
+            dst = os.path.join(gamedir, "reframework", "plugins", "source", dirname_only)
+            try:
+                os.remove(dst)  # remove symlink if exists
+            except FileNotFoundError:
+                pass
+            try:
+                shutil.rmtree(dst)  # remove real dir if exists
+            except FileNotFoundError:
+                pass
+
+            if just_copy == True:
+                shutil.copytree(src, dst)
+            else:
+                os.symlink(src, dst, target_is_directory=True)
 
     plugins_dir_files = [
         "REFramework.NET.dll",

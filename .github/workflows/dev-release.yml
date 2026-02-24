@@ -27,7 +27,7 @@ jobs:
         working-directory: ${{github.workspace}}/csharp-api
         run: |
           pip install -r requirements.txt
-          python make_symlinks.py --gamedir="${{github.workspace}}/csharp-api" --bindir="${{github.workspace}}/csharp-api/build/bin" --just_copy=True
+          python make_symlinks.py --gamedir="${{github.workspace}}/csharp-api" --bindir="${{github.workspace}}/csharp-api/build/bin" --just_copy=True --skip_test_scripts=True
 
       - name: Compress release
         working-directory: ${{github.workspace}}/csharp-api
