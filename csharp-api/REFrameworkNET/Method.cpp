@@ -13,6 +13,7 @@
 #include "Proxy.hpp"
 
 #include "Utility.hpp"
+#include "ValueType.hpp"
 
 using namespace System;
 
@@ -239,12 +240,41 @@ System::Object^ Method::InvokeBoxed(System::Type^ targetReturnType, System::Obje
     }
 
     void* obj_ptr = nullptr;
+    // Temporary storage for fake boxed value type (0x10 header + value type data)
+    std::vector<uint8_t> fake_boxed_storage;
+    uintptr_t fake_object_ptr{};
 
     if (obj != nullptr) try {
         const auto obj_t = obj->GetType();
 
         if (REFrameworkNET::IObject::typeid->IsAssignableFrom(obj_t)) {
-            obj_ptr = static_cast<REFrameworkNET::IObject^>(obj)->Ptr();
+            auto iobj = static_cast<REFrameworkNET::IObject^>(obj);
+
+            // For instance methods on value types, we need to construct a fake boxed object.
+            // The native invoke() expects a ManagedObject* with a 0x10 byte header:
+            //   0x00: REObjectInfo* (type info / vtable pointer)
+            //   0x08: uint32_t refcount + padding
+            //   0x10: actual value type data starts here
+            // ValueType::Ptr() returns raw data at offset 0, so we need to prepend the header.
+            if (!this->IsStatic() && REFrameworkNET::ValueType::typeid->IsAssignableFrom(obj_t)) {
+                auto vt = static_cast<REFrameworkNET::ValueType^>(iobj);
+                auto type_def = vt->GetTypeDefinition();
+                auto vt_size = type_def->ValueTypeSize;
+
+                fake_boxed_storage.resize(0x10 + vt_size, 0);
+                fake_object_ptr = (uintptr_t)type_def->Ptr();
+
+                // REObject header: REObjectInfo* at offset 0x00
+                *(void**)&fake_boxed_storage[0x00] = (void*)fake_object_ptr;
+                // REManagedObject: reference count at offset 0x08 (set high to prevent GC interference)
+                *(uint32_t*)&fake_boxed_storage[0x08] = 9999;
+                // Copy value type data at offset 0x10
+                memcpy(&fake_boxed_storage[0x10], vt->Ptr(), vt_size);
+
+                obj_ptr = fake_boxed_storage.data();
+            } else {
+                obj_ptr = iobj->Ptr();
+            }
         } else if (obj_t == System::IntPtr::typeid) {
             obj_ptr = (void*)(intptr_t)safe_cast<System::IntPtr>(obj).ToPointer();
         } else if (obj_t == System::UIntPtr::typeid) {
@@ -258,7 +288,19 @@ System::Object^ Method::InvokeBoxed(System::Type^ targetReturnType, System::Obje
 
     const auto argcount = args != nullptr ? args->Length : 0;
 
-    return m_method->invoke((::reframework::API::ManagedObject*)obj_ptr, std::span<void*>(args2.data(), argcount));
+    auto result = m_method->invoke((::reframework::API::ManagedObject*)obj_ptr, std::span<void*>(args2.data(), argcount));
+
+    // If we used a fake boxed object, copy any mutations back to the original value type
+    if (!fake_boxed_storage.empty() && obj != nullptr) {
+        auto iobj = static_cast<REFrameworkNET::IObject^>(obj);
+        if (REFrameworkNET::ValueType::typeid->IsAssignableFrom(obj->GetType())) {
+            auto vt = static_cast<REFrameworkNET::ValueType^>(iobj);
+            auto vt_size = vt->GetTypeDefinition()->ValueTypeSize;
+            memcpy(vt->Ptr(), &fake_boxed_storage[0x10], vt_size);
+        }
+    }
+
+    return result;
 }
 
 bool Method::HandleInvokeMember_Internal(System::Object^ obj, array<System::Object^>^ args, System::Object^% result) {
