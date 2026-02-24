@@ -12,6 +12,7 @@
 #include "mods/ManualFlashlight.hpp"
 #include "mods/PluginLoader.hpp"
 #include "mods/REFrameworkConfig.hpp"
+#include "mods/MethodDatabase.hpp"
 #include "mods/Scene.hpp"
 #include "mods/ScriptRunner.hpp"
 #include "mods/VR.hpp"
@@ -29,6 +30,7 @@ Mods::Mods() {
 #endif
 
 #ifndef BAREBONES
+    m_mods.emplace_back(MethodDatabase::get());
     m_mods.emplace_back(Hooks::get());
     m_mods.emplace_back(LooseFileLoader::get());
 
