@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MHWilds Dashboard</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<h1>Monster Hunter Wilds</h1>
+<p class="subtitle">REFramework.NET Live Dashboard</p>
+
+<div class="grid">
+  <div class="card" id="player-card">
+    <h2><span class="dot"></span> Player</h2>
+    <div id="player-content"><span class="error-msg">Loading...</span></div>
+  </div>
+
+  <div class="card" id="camera-card">
+    <h2><span class="dot"></span> Camera</h2>
+    <div id="camera-content"><span class="error-msg">Loading...</span></div>
+  </div>
+
+  <div class="card" id="tdb-card">
+    <h2><span class="dot"></span> Type Database</h2>
+    <div id="tdb-content"><span class="error-msg">Loading...</span></div>
+  </div>
+
+  <div class="card" style="grid-column: 1 / -1;" id="singleton-card">
+    <h2><span class="dot"></span> Managed Singletons <span id="singleton-count" style="color:#8b949e;font-size:0.8em"></span></h2>
+    <input type="text" class="search" id="singleton-search" placeholder="Filter singletons...">
+    <div class="singleton-list" id="singleton-content"><span class="error-msg">Loading...</span></div>
+  </div>
+</div>
+
+<div class="poll-info" id="poll-info"></div>
+
+<script src="/dashboard.js"></script>
+</body>
+</html>

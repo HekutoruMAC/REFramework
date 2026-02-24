@@ -3,6 +3,7 @@
 #include <reframework/API.hpp>
 
 #include "./API.hpp"
+#include "./PluginManager.hpp"
 
 
 REFrameworkNET::API::API(const REFrameworkPluginInitializeParam* param)
@@ -177,4 +178,24 @@ void REFrameworkNET::API::LogInfo(System::String^ message) {
             System::Console::WriteLine(message);
         }
     }
+}
+
+System::String^ REFrameworkNET::API::GetPluginDirectory(System::Reflection::Assembly^ assembly) {
+    if (assembly == nullptr) {
+        return nullptr;
+    }
+
+    for each (auto state in PluginManager::s_plugin_states) {
+        if (state->assembly == assembly && state->script_path != nullptr) {
+            return System::IO::Path::GetDirectoryName(state->script_path);
+        }
+    }
+
+    // Fallback: try Assembly.Location for precompiled DLLs loaded outside PluginManager
+    auto location = assembly->Location;
+    if (!System::String::IsNullOrEmpty(location)) {
+        return System::IO::Path::GetDirectoryName(location);
+    }
+
+    return nullptr;
 }

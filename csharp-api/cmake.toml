@@ -265,6 +265,15 @@ cmake-after = """
 set_dotnet_references(CSharpAPITestMHWilds "mhwilds" "${MHWILDS_DLLS}")
 """
 
+[target.CSharpAPITestMHWildsWebAPI]
+condition = "build-csharp-test-mhwilds"
+type = "CSharpSharedTarget"
+sources = ["test/Test/TestMHWildsWebAPI.cs"]
+link-libraries = ["csharp-api"]
+cmake-after = """
+set_dotnet_references(CSharpAPITestMHWildsWebAPI "mhwilds" "${MHWILDS_DLLS}")
+"""
+
 [target.CSharpAPITestDMC5]
 condition = "build-csharp-test-dmc5"
 type = "CSharpSharedTarget"

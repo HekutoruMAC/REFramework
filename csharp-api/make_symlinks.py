@@ -31,6 +31,7 @@ def symlink_main(gamedir=None, bindir="build/bin", just_copy=False):
         "Test/Test/TestRE2.cs",
         "Test/Test/TestRE4.cs",
         "Test/Test/TestMHWilds.cs",
+        "Test/Test/TestMHWildsWebAPI.cs",
         "Test/Test/ObjectExplorer.cs",
     ]
 
@@ -48,6 +49,28 @@ def symlink_main(gamedir=None, bindir="build/bin", just_copy=False):
             shutil.copy(src, dst)
         else:
             os.symlink(src, dst)
+
+    source_dir_dirs = [
+        "Test/Test/WebAPI",
+    ]
+
+    for dir in source_dir_dirs:
+        src = os.path.abspath(dir)
+        dirname_only = os.path.basename(dir)
+        dst = os.path.join(gamedir, "reframework", "plugins", "source", dirname_only)
+        try:
+            os.remove(dst)  # remove symlink if exists
+        except FileNotFoundError:
+            pass
+        try:
+            shutil.rmtree(dst)  # remove real dir if exists
+        except FileNotFoundError:
+            pass
+
+        if just_copy == True:
+            shutil.copytree(src, dst)
+        else:
+            os.symlink(src, dst, target_is_directory=True)
 
     plugins_dir_files = [
         "REFramework.NET.dll",

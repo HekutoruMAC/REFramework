@@ -87,6 +87,10 @@ public:
 
     static void LogInfo(System::String^ message);
 
+    // Returns the directory containing the plugin's source file (.cs) or DLL (.dll).
+    // Pass your own assembly, e.g. API.GetPluginDirectory(typeof(MyPlugin).Assembly)
+    static System::String^ GetPluginDirectory(System::Reflection::Assembly^ assembly);
+
 protected:
     void Init_Internal(const REFrameworkPluginInitializeParam* param);
 
