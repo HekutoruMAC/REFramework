@@ -3,7 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Dynamic;
 using System.Reflection;
-using ImGuiNET;
+using Hexa.NET.ImGui;
 using REFrameworkNET;
 using REFrameworkNET.Callbacks;
 using REFrameworkNET.Attributes;
@@ -252,7 +252,7 @@ class ObjectExplorer {
         ImGui.Text("Namespace: " + t.GetNamespace());
 
         if (t.DeclaringType != null) {
-            var made = ImGui.TreeNodeEx("Declaring Type: ", ImGuiNET.ImGuiTreeNodeFlags.SpanFullWidth);
+            var made = ImGui.TreeNodeEx("Declaring Type: ", ImGuiTreeNodeFlags.SpanFullWidth);
             ImGui.SameLine(0.0f, 0.0f);
             ImGui.TextColored(TYPE_COLOR, t.DeclaringType.GetFullName());
             if (made) {
@@ -262,7 +262,7 @@ class ObjectExplorer {
         }
 
         if (t.ParentType != null) {
-            var made = ImGui.TreeNodeEx("Parent Type: ", ImGuiNET.ImGuiTreeNodeFlags.SpanFullWidth);
+            var made = ImGui.TreeNodeEx("Parent Type: ", ImGuiTreeNodeFlags.SpanFullWidth);
             ImGui.SameLine(0.0f, 0.0f);
             ImGui.TextColored(TYPE_COLOR, t.ParentType.GetFullName());
             if (made) {

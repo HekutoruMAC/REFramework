@@ -78,8 +78,10 @@ def symlink_main(gamedir=None, bindir="build/bin", just_copy=False):
         "Microsoft.CodeAnalysis.dll",
         "Microsoft.CodeAnalysis.CSharp.xml",
         "Microsoft.CodeAnalysis.xml",
-        "ImGui.NET.dll",
-        "ImGui.NET.xml",
+        "Hexa.NET.ImGui.dll",
+        "Hexa.NET.ImGui.xml",
+        "HexaGen.Runtime.dll",
+        "HexaGen.Runtime.xml",
     ]
 
     for file in dependencies_dir_files:

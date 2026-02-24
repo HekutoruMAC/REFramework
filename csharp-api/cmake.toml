@@ -109,7 +109,8 @@ check_dlls_exist("mhwilds" "${MHWILDS_DLLS}" "REFRAMEWORK_REF_ASSEMBLIES_EXIST_M
 set(REFRAMEWORK_NUGET_PACKAGES
     "Microsoft.CodeAnalysis.Common:4.9.2:net7.0"
     "Microsoft.CodeAnalysis.CSharp:4.9.2:net7.0"
-    "ImGui.NET:1.90.1.1:net6.0"
+    "Hexa.NET.ImGui:2.2.9:net8.0"
+    "HexaGen.Runtime:1.1.21:net8.0"
 )
 
 # Generate the VS_PACKAGE_REFERENCES property value

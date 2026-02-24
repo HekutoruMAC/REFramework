@@ -13,7 +13,7 @@
 
 #include "Utility.hpp"
 
-using namespace ImGuiNET;
+using namespace Hexa::NET::ImGui;
 
 namespace REFrameworkNET {
     void ManagedObject::CleanupKnownCaches() {

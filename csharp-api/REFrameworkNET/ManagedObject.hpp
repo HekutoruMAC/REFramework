@@ -117,10 +117,10 @@ internal:
         }
 
         static void DisplayStats() {
-            if (ImGuiNET::ImGui::TreeNode(T::typeid->Name + " Cache")) {
-                ImGuiNET::ImGui::Text("Cache size: " + s_impl->cache->Count.ToString());
-                ImGuiNET::ImGui::Text("Pool size: " + s_impl->pool->Count.ToString());
-                ImGuiNET::ImGui::TreePop();
+            if (Hexa::NET::ImGui::ImGui::TreeNode(T::typeid->Name + " Cache")) {
+                Hexa::NET::ImGui::ImGui::Text("Cache size: " + s_impl->cache->Count.ToString());
+                Hexa::NET::ImGui::ImGui::Text("Pool size: " + s_impl->pool->Count.ToString());
+                Hexa::NET::ImGui::ImGui::TreePop();
             }
         }
 

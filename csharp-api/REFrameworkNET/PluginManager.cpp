@@ -808,24 +808,24 @@ namespace REFrameworkNET {
 
     void PluginManager::ImGuiDrawUICallback(::REFImGuiFrameCbData* data) {
         // Draw our REFramework.NET menu which has buttons like reload scripts
-        ImGuiNET::ImGui::PushID("REFramework.NET");
-        if (ImGuiNET::ImGui::CollapsingHeader("REFramework.NET")) {
-            if (ImGuiNET::ImGui::Button("Reload Scripts")) {
+        Hexa::NET::ImGui::ImGui::PushID("REFramework.NET");
+        if (Hexa::NET::ImGui::ImGui::CollapsingHeader("REFramework.NET")) {
+            if (Hexa::NET::ImGui::ImGui::Button("Reload Scripts")) {
                 s_wants_reload = true;
             }
 
-            ImGuiNET::ImGui::SameLine();
+            Hexa::NET::ImGui::ImGui::SameLine();
 
-            if (ImGuiNET::ImGui::Button("Unload Scripts")) {
+            if (Hexa::NET::ImGui::ImGui::Button("Unload Scripts")) {
                 PluginManager::UnloadPlugins();
             }
 
-            ImGuiNET::ImGui::Checkbox("Auto Reload", s_auto_reload_plugins);
+            Hexa::NET::ImGui::ImGui::Checkbox("Auto Reload", s_auto_reload_plugins);
 
-            if (ImGuiNET::ImGui::TreeNode("Debug Stats")) {
-                if (ImGuiNET::ImGui::TreeNode("Garbage Collection")) {
+            if (Hexa::NET::ImGui::ImGui::TreeNode("Debug Stats")) {
+                if (Hexa::NET::ImGui::ImGui::TreeNode("Garbage Collection")) {
                     REFrameworkNET::GarbageCollectionDisplay::Render();
-                    ImGuiNET::ImGui::TreePop();
+                    Hexa::NET::ImGui::ImGui::TreePop();
                 }
 
                 ManagedObject::Cache<ManagedObject>::DisplayStats();
@@ -835,7 +835,7 @@ namespace REFrameworkNET {
                 NativePool<Field>::DisplayStats();
                 UnifiedObject::ProxyPool::DisplayStats();
 
-                ImGuiNET::ImGui::TreePop();
+                Hexa::NET::ImGui::ImGui::TreePop();
             }
             
             for each (PluginState^ state in PluginManager::s_plugin_states) {
@@ -849,7 +849,7 @@ namespace REFrameworkNET {
             PluginManager::s_plugin_states_to_remove->Clear();
         }
 
-        if (ImGuiNET::ImGui::CollapsingHeader("REFramework.NET Script Generated UI")) {
+        if (Hexa::NET::ImGui::ImGui::CollapsingHeader("REFramework.NET Script Generated UI")) {
             try {
                 Callbacks::ImGuiDrawUI::TriggerPre();
             } catch (System::Exception^ e) {
@@ -871,7 +871,7 @@ namespace REFrameworkNET {
             }
         }
 
-        ImGuiNET::ImGui::PopID();
+        Hexa::NET::ImGui::ImGui::PopID();
     }
 
     void PluginManager::PluginState::Unload() {
@@ -910,8 +910,8 @@ namespace REFrameworkNET {
     }
 
     void PluginManager::PluginState::DisplayOptions() {
-        if (ImGuiNET::ImGui::TreeNode(System::IO::Path::GetFileName(script_path))) {
-            if (ImGuiNET::ImGui::Button("Unload")) {
+        if (Hexa::NET::ImGui::ImGui::TreeNode(System::IO::Path::GetFileName(script_path))) {
+            if (Hexa::NET::ImGui::ImGui::Button("Unload")) {
                 if (SynchronousUnload()) {
                     REFrameworkNET::API::LogInfo("Successfully unloaded " + script_path);
                     // Remove this state from the list
@@ -922,7 +922,7 @@ namespace REFrameworkNET {
                 }
             }
 
-            ImGuiNET::ImGui::TreePop();
+            Hexa::NET::ImGui::ImGui::TreePop();
         }
     }
 }

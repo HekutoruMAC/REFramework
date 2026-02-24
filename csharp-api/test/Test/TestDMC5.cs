@@ -3,7 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Dynamic;
 using System.Reflection;
-using ImGuiNET;
+using Hexa.NET.ImGui;
 using REFrameworkNET.Callbacks;
 using REFrameworkNET.Attributes;
 using REFrameworkNET;

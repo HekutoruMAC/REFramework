@@ -1,6 +1,6 @@
 using System;
 
-using ImGuiNET;
+using Hexa.NET.ImGui;
 using REFrameworkNET;
 using REFrameworkNET.Callbacks;
 using REFrameworkNET.Attributes;

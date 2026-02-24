@@ -33,13 +33,13 @@ namespace REFrameworkNET {
         }
 
         static void DisplayStats() {
-            if (ImGuiNET::ImGui::TreeNode(T::typeid->Name + " Cache")) {
-                if (ImGuiNET::ImGui::Button("Clear Cache")) {
+            if (Hexa::NET::ImGui::ImGui::TreeNode(T::typeid->Name + " Cache")) {
+                if (Hexa::NET::ImGui::ImGui::Button("Clear Cache")) {
                     s_cache->Clear();
                 }
                 
-                ImGuiNET::ImGui::Text("Cache size: " + s_cache->Count.ToString());
-                ImGuiNET::ImGui::TreePop();
+                Hexa::NET::ImGui::ImGui::Text("Cache size: " + s_cache->Count.ToString());
+                Hexa::NET::ImGui::ImGui::TreePop();
             }
         }
     };

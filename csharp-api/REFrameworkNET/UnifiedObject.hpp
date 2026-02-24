@@ -1,5 +1,8 @@
 #pragma once
 
+#pragma warning(push)
+#pragma warning(disable: 4642) // could not import constraints for generic parameter
+
 #include "IObject.hpp"
 #include "ObjectEnumerator.hpp"
 
@@ -211,9 +214,9 @@ internal:
         }
 
         static void DisplayStats() {
-            if (ImGuiNET::ImGui::TreeNode("ProxyPool")) {
-                ImGuiNET::ImGui::Text("Cache size: " + s_cache->Count.ToString());
-                ImGuiNET::ImGui::TreePop();
+            if (Hexa::NET::ImGui::ImGui::TreeNode("ProxyPool")) {
+                Hexa::NET::ImGui::ImGui::Text("Cache size: " + s_cache->Count.ToString());
+                Hexa::NET::ImGui::ImGui::TreePop();
             }
         }
 
@@ -225,3 +228,5 @@ internal:
     };
 };
 }
+
+#pragma warning(pop)
