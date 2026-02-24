@@ -1,6 +1,10 @@
 const API_BASE = window.location.origin;
 let pollCount = 0;
 
+// Health slider state
+let isDraggingHealth = false;
+let lastKnownMaxHealth = 100;
+
 function row(label, value, cls = '') {
   return `<div class='row'><span class='label'>${label}</span><span class='value ${cls}'>${value}</span></div>`;
 }
@@ -25,6 +29,43 @@ async function fetchJson(path) {
   return r.json();
 }
 
+async function setPlayerHealth(value) {
+  await fetch(API_BASE + '/api/player/health', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ value })
+  });
+}
+
+function updateHealthBar(health, maxHealth) {
+  const pct = maxHealth > 0 ? health / maxHealth : 0;
+  const color = hpColor(pct);
+  const bar = document.getElementById('hp-bar-fill');
+  const label = document.getElementById('hp-bar-label');
+  if (bar) {
+    bar.style.width = (pct * 100) + '%';
+    bar.style.background = color;
+  }
+  if (label) {
+    label.textContent = `${fmt(health, 0)} / ${fmt(maxHealth, 0)}`;
+  }
+}
+
+function onHealthSliderInput(e) {
+  const val = parseFloat(e.target.value);
+  updateHealthBar(val, lastKnownMaxHealth);
+}
+
+function onHealthSliderDown() {
+  isDraggingHealth = true;
+}
+
+function onHealthSliderUp(e) {
+  isDraggingHealth = false;
+  const val = parseFloat(e.target.value);
+  setPlayerHealth(val);
+}
+
 async function updatePlayer() {
   try {
     const d = await fetchJson('/api/player');
@@ -32,15 +73,51 @@ async function updatePlayer() {
     setDot('player-card', !d.error);
     if (d.error) { el.innerHTML = `<span class='error-msg'>${d.error}</span>`; return; }
 
-    const pct = d.maxHealth > 0 ? d.health / d.maxHealth : 0;
-    const color = hpColor(pct);
+    if (d.maxHealth > 0) lastKnownMaxHealth = d.maxHealth;
 
-    el.innerHTML =
-      row('Name', d.name || '?', 'highlight') +
-      row('Level', d.level) +
-      `<div class='hp-bar-bg'><div class='hp-bar' style='width:${pct*100}%;background:${color}'>${fmt(d.health,0)} / ${fmt(d.maxHealth,0)}</div></div>` +
-      row('Position', `${fmt(d.position.x)}, ${fmt(d.position.y)}, ${fmt(d.position.z)}`) +
-      row('Dist to Camera', fmt(d.distToCamera));
+    // Build health slider row — only rebuild DOM if slider doesn't exist yet
+    const slider = document.getElementById('hp-slider');
+    if (!slider) {
+      el.innerHTML =
+        row('Name', d.name || '?', 'highlight') +
+        row('Level', d.level) +
+        `<div class='hp-bar-bg'>
+          <div class='hp-bar' id='hp-bar-fill'><span id='hp-bar-label'></span></div>
+        </div>
+        <input type='range' id='hp-slider' class='hp-slider' min='0' max='${d.maxHealth || 100}' step='1' value='${d.health || 0}'>` +
+        row('Position', `${fmt(d.position.x)}, ${fmt(d.position.y)}, ${fmt(d.position.z)}`) +
+        row('Dist to Camera', fmt(d.distToCamera));
+
+      // Attach events after DOM insertion
+      const newSlider = document.getElementById('hp-slider');
+      newSlider.addEventListener('input', onHealthSliderInput);
+      newSlider.addEventListener('pointerdown', onHealthSliderDown);
+      newSlider.addEventListener('pointerup', onHealthSliderUp);
+    } else {
+      // Update slider max if it changed
+      if (d.maxHealth && parseFloat(slider.max) !== d.maxHealth) {
+        slider.max = d.maxHealth;
+      }
+
+      // Only update slider value if user isn't dragging
+      if (!isDraggingHealth) {
+        slider.value = d.health;
+      }
+
+      // Update non-slider rows
+      // Name + Level are the first two rows
+      const rows = el.querySelectorAll('.row');
+      if (rows[0]) rows[0].querySelector('.value').textContent = d.name || '?';
+      if (rows[1]) rows[1].querySelector('.value').textContent = d.level;
+      if (rows[2]) rows[2].querySelector('.value').textContent =
+        `${fmt(d.position.x)}, ${fmt(d.position.y)}, ${fmt(d.position.z)}`;
+      if (rows[3]) rows[3].querySelector('.value').textContent = fmt(d.distToCamera);
+    }
+
+    // Always update the visual bar (unless dragging, which handles it via onHealthSliderInput)
+    if (!isDraggingHealth) {
+      updateHealthBar(d.health, d.maxHealth);
+    }
   } catch(e) {
     setDot('player-card', false);
     document.getElementById('player-content').innerHTML = `<span class='error-msg'>${e.message}</span>`;

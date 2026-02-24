@@ -43,5 +43,65 @@ h1 { color: #58a6ff; margin-bottom: 8px; font-size: 1.6em; }
   color: #c9d1d9; font-size: 0.9em; outline: none;
 }
 .search:focus { border-color: #58a6ff; }
+.hp-slider {
+  width: 100%; height: 6px; margin: 4px 0 8px 0;
+  -webkit-appearance: none; appearance: none;
+  background: #21262d; border-radius: 3px; outline: none;
+  cursor: pointer;
+}
+.hp-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: #58a6ff; border: 2px solid #0d1117;
+  cursor: grab;
+}
+.hp-slider::-webkit-slider-thumb:active { cursor: grabbing; background: #79c0ff; }
+.hp-slider::-moz-range-thumb {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: #58a6ff; border: 2px solid #0d1117;
+  cursor: grab;
+}
+.hp-slider::-moz-range-thumb:active { cursor: grabbing; background: #79c0ff; }
 .error-msg { color: #f85149; font-style: italic; }
 .poll-info { color: #484f58; font-size: 0.75em; text-align: right; margin-top: 16px; }
+
+/* ── Explorer / Tree styles ────────────────────────────────────── */
+.nav-link { color: #58a6ff; text-decoration: none; font-size: 0.9em; }
+.nav-link:hover { text-decoration: underline; }
+
+.tree-node { margin-left: 16px; }
+.tree-header {
+  display: flex; align-items: center; gap: 4px;
+  padding: 3px 4px; border-radius: 4px; cursor: pointer;
+  user-select: none; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 0.85em;
+}
+.tree-header:hover { background: #1c2128; }
+.tree-arrow {
+  display: inline-block; width: 16px; text-align: center;
+  color: #8b949e; font-size: 0.7em; transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+.tree-arrow.expanded { transform: rotate(90deg); }
+.tree-arrow.leaf { visibility: hidden; }
+.tree-children { display: none; }
+.tree-children.open { display: block; }
+.tree-leaf { margin-left: 16px; padding: 2px 4px; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 0.85em; }
+.tree-load-more {
+  margin-left: 32px; padding: 4px 12px; margin-top: 4px;
+  background: #21262d; border: 1px solid #30363d; border-radius: 4px;
+  color: #58a6ff; cursor: pointer; font-size: 0.8em;
+}
+.tree-load-more:hover { background: #30363d; }
+.tree-group-label {
+  color: #58a6ff; font-weight: 600; font-size: 0.95em;
+  padding: 6px 4px; border-bottom: 1px solid #21262d;
+}
+.tree-status { color: #8b949e; font-style: italic; font-size: 0.8em; padding: 4px 20px; }
+
+/* ObjectExplorer color classes */
+.oe-type { color: #4ec9b0; }
+.oe-field { color: #9cdcfe; }
+.oe-method { color: #dcdcaa; }
+.oe-static { color: #c04000; }
+.oe-value { color: #ce9178; }
+.oe-null { color: #8b949e; font-style: italic; }
