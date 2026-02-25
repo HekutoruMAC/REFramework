@@ -537,6 +537,47 @@ if(REFRAMEWORK_REF_ASSEMBLIES_EXIST_MHWILDS) # build-csharp-test-mhwilds
 	set_dotnet_references(CSharpAPITestMHWilds "mhwilds" "${MHWILDS_DLLS}")
 
 endif()
+# Target: CSharpAPITestMHWildsWebAPI
+if(REFRAMEWORK_REF_ASSEMBLIES_EXIST_MHWILDS) # build-csharp-test-mhwilds
+	set(CSharpAPITestMHWildsWebAPI_SOURCES
+		"test/Test/TestMHWildsWebAPI.cs"
+		cmake.toml
+	)
+
+	add_library(CSharpAPITestMHWildsWebAPI SHARED)
+
+	target_sources(CSharpAPITestMHWildsWebAPI PRIVATE ${CSharpAPITestMHWildsWebAPI_SOURCES})
+	source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${CSharpAPITestMHWildsWebAPI_SOURCES})
+
+	target_link_libraries(CSharpAPITestMHWildsWebAPI PUBLIC
+		csharp-api
+	)
+
+	set_target_properties(CSharpAPITestMHWildsWebAPI PROPERTIES
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE
+			"${CMAKE_BINARY_DIR}/bin/"
+		RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO
+			"${CMAKE_BINARY_DIR}/bin"
+		RUNTIME_OUTPUT_DIRECTORY_DEBUG
+			"${CMAKE_BINARY_DIR}/bin"
+		LIBRARY_OUTPUT_DIRECTORY_RELEASE
+			"${CMAKE_BINARY_DIR}/lib"
+		LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO
+			"${CMAKE_BINARY_DIR}/lib"
+		LIBRARY_OUTPUT_DIRECTORY_DEBUG
+			"${CMAKE_BINARY_DIR}/lib"
+		DOTNET_SDK
+			Microsoft.NET.Sdk
+		DOTNET_TARGET_FRAMEWORK
+			net8.0-windows
+		VS_CONFIGURATION_TYPE
+			ClassLibrary
+	)
+
+	set(CMKR_TARGET CSharpAPITestMHWildsWebAPI)
+	set_dotnet_references(CSharpAPITestMHWildsWebAPI "mhwilds" "${MHWILDS_DLLS}")
+
+endif()
 # Target: CSharpAPITestDMC5
 if(REFRAMEWORK_REF_ASSEMBLIES_EXIST_DMC5) # build-csharp-test-dmc5
 	set(CSharpAPITestDMC5_SOURCES

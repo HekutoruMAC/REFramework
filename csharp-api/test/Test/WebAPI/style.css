@@ -62,8 +62,91 @@ h1 { color: #58a6ff; margin-bottom: 8px; font-size: 1.6em; }
   cursor: grab;
 }
 .hp-slider::-moz-range-thumb:active { cursor: grabbing; background: #79c0ff; }
+#fps-canvas { width: 100%; display: block; }
+.weather-current { display: flex; align-items: center; gap: 10px; }
+.weather-icon { font-size: 2em; }
+.weather-name { font-size: 1.3em; color: #c9d1d9; font-weight: 600; }
+.weather-clock { color: #c9d1d9; font-size: 1.1em; margin-top: 6px; font-family: 'Cascadia Code', 'Fira Code', monospace; }
+.weather-timezone { color: #8b949e; font-size: 0.75em; text-transform: capitalize; }
+.weather-next { color: #d29922; font-size: 0.85em; margin-top: 6px; }
+.weather-blends { margin-top: 12px; }
+.weather-blend-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.weather-blend-label { color: #8b949e; font-size: 0.8em; min-width: 110px; }
+.weather-blend-bar-bg { flex: 1; height: 6px; background: #21262d; border-radius: 3px; overflow: hidden; }
+.weather-blend-bar { height: 100%; background: #58a6ff; border-radius: 3px; transition: width 0.5s ease; }
+.weather-blend-pct { color: #8b949e; font-size: 0.75em; font-family: monospace; min-width: 32px; text-align: right; }
 .error-msg { color: #f85149; font-style: italic; }
 .poll-info { color: #484f58; font-size: 0.75em; text-align: right; margin-top: 16px; }
+
+/* ── Equipment styles ───────────────────────────────────────────── */
+.equip-weapon {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; margin-bottom: 10px;
+  background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+}
+.equip-weapon-name { color: #f0883e; font-weight: 600; font-size: 1.05em; }
+.equip-weapon-type { color: #8b949e; font-size: 0.8em; }
+.equip-armor-list { display: flex; flex-direction: column; gap: 4px; }
+.equip-armor-piece {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 5px 10px; background: #0d1117; border: 1px solid #21262d; border-radius: 6px;
+  font-size: 0.85em;
+}
+.equip-slot { color: #8b949e; min-width: 44px; font-size: 0.8em; }
+.equip-name { color: #c9d1d9; flex: 1; margin: 0 8px; }
+.equip-level { color: #8b949e; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 0.8em; }
+.equip-stats {
+  display: flex; gap: 12px; flex-wrap: wrap;
+  padding: 8px 0; margin-bottom: 8px; border-bottom: 1px solid #21262d;
+}
+.equip-stat { display: flex; flex-direction: column; align-items: center; min-width: 50px; }
+.equip-stat-label { color: #8b949e; font-size: 0.7em; text-transform: uppercase; }
+.equip-stat-val { color: #c9d1d9; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 1.05em; font-weight: 600; }
+.equip-slots { display: flex; gap: 3px; align-items: center; }
+.equip-gem {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 50%; font-size: 0.7em; font-weight: 700;
+  border: 1.5px solid #484f58; color: #c9d1d9; background: #21262d;
+}
+.equip-gem-1 { border-color: #8b949e; }
+.equip-gem-2 { border-color: #58a6ff; color: #58a6ff; }
+.equip-gem-3 { border-color: #d29922; color: #d29922; }
+.equip-gem-4 { border-color: #a371f7; color: #a371f7; }
+
+/* ── Inventory styles ────────────────────────────────────────────── */
+.inventory-list { display: flex; flex-direction: column; gap: 3px; max-height: 400px; overflow-y: auto; }
+.inv-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 5px 10px; background: #0d1117; border: 1px solid #21262d; border-radius: 6px;
+  font-size: 0.85em;
+}
+.inv-name { color: #c9d1d9; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inv-qty { color: #8b949e; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 0.9em; margin-left: 8px; }
+
+/* ── Mesh visibility styles ──────────────────────────────────────── */
+.mesh-list { display: flex; flex-direction: column; gap: 3px; max-height: 400px; overflow-y: auto; }
+.mesh-toggle {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 10px; background: #0d1117; border: 1px solid #21262d; border-radius: 6px;
+  font-size: 0.85em; cursor: pointer; user-select: none;
+}
+.mesh-toggle:hover { border-color: #30363d; }
+.mesh-toggle input[type="checkbox"] { accent-color: #58a6ff; cursor: pointer; }
+.mesh-label { color: #c9d1d9; flex: 1; }
+.mesh-name { color: #484f58; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 0.8em; }
+
+/* ── Lobby styles ────────────────────────────────────────────────── */
+.lobby-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 6px; max-height: 500px; overflow-y: auto; }
+.lobby-member {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; border-radius: 6px; background: #0d1117;
+  border: 1px solid #21262d; font-size: 0.85em;
+}
+.lobby-member.is-self { border-color: #3fb950; background: #0d1117; }
+.lobby-member.is-quest { border-color: #d29922; }
+.lobby-name { color: #c9d1d9; font-weight: 500; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lobby-member.is-self .lobby-name { color: #3fb950; }
+.lobby-hr { color: #8b949e; font-size: 0.8em; font-family: monospace; }
 
 /* ── Explorer / Tree styles ────────────────────────────────────── */
 .nav-link { color: #58a6ff; text-decoration: none; font-size: 0.9em; }
@@ -105,3 +188,14 @@ h1 { color: #58a6ff; margin-bottom: 8px; font-size: 1.6em; }
 .oe-static { color: #c04000; }
 .oe-value { color: #ce9178; }
 .oe-null { color: #8b949e; font-style: italic; }
+
+/* ── Tooltip ─────────────────────────────────────────────────────── */
+.tip {
+  position: fixed; z-index: 9999; pointer-events: none;
+  max-width: 340px; padding: 10px 14px;
+  background: #1c2128; border: 1px solid #30363d; border-radius: 8px;
+  color: #c9d1d9; font-size: 0.82em; line-height: 1.45;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  opacity: 0; transition: opacity 0.15s ease;
+}
+.tip.show { opacity: 1; }

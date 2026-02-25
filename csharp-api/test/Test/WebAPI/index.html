@@ -21,15 +21,39 @@
     <div id="camera-content"><span class="error-msg">Loading...</span></div>
   </div>
 
-  <div class="card" id="tdb-card">
-    <h2><span class="dot"></span> Type Database</h2>
-    <div id="tdb-content"><span class="error-msg">Loading...</span></div>
+  <div class="card" id="fps-card">
+    <h2><span class="dot"></span> FPS <span id="fps-value" style="color:#8b949e;font-size:0.8em"></span></h2>
+    <canvas id="fps-canvas" width="360" height="100"></canvas>
   </div>
 
-  <div class="card" style="grid-column: 1 / -1;" id="singleton-card">
-    <h2><span class="dot"></span> Managed Singletons <span id="singleton-count" style="color:#8b949e;font-size:0.8em"></span></h2>
-    <input type="text" class="search" id="singleton-search" placeholder="Filter singletons...">
-    <div class="singleton-list" id="singleton-content"><span class="error-msg">Loading...</span></div>
+  <div class="card" id="weather-card">
+    <h2><span class="dot"></span> Weather</h2>
+    <div id="weather-content"><span class="error-msg">Loading...</span></div>
+  </div>
+
+  <div class="card" id="map-card">
+    <h2><span class="dot"></span> Location</h2>
+    <div id="map-content"><span class="error-msg">Loading...</span></div>
+  </div>
+
+  <div class="card" id="equip-card">
+    <h2><span class="dot"></span> Equipment</h2>
+    <div id="equip-content"><span class="error-msg">Loading...</span></div>
+  </div>
+
+  <div class="card" id="inventory-card">
+    <h2><span class="dot"></span> Item Pouch <span id="inventory-count" style="color:#8b949e;font-size:0.8em"></span></h2>
+    <div class="inventory-list" id="inventory-content"><span class="error-msg">Loading...</span></div>
+  </div>
+
+  <div class="card" id="mesh-card">
+    <h2><span class="dot"></span> Mesh Visibility</h2>
+    <div class="mesh-list" id="mesh-content"><span class="error-msg">Loading...</span></div>
+  </div>
+
+  <div class="card" style="grid-column: 1 / -1;" id="lobby-card">
+    <h2><span class="dot"></span> Lobby Members <span id="lobby-count" style="color:#8b949e;font-size:0.8em"></span></h2>
+    <div class="lobby-list" id="lobby-content"><span class="error-msg">Loading...</span></div>
   </div>
 </div>
 
