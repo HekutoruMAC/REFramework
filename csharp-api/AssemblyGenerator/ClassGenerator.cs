@@ -908,6 +908,19 @@ public class ClassGenerator {
 
                 List<StatementSyntax> bodyStatements = [];
 
+                // For op_Equality/op_Inequality, short-circuit when either arg is null
+                // to avoid calling into native code with a potentially invalid pointer.
+                // (object) cast forces CLR reference equality, avoiding recursive op_Equality.
+                if (methodName == "op_Equality" && method.Parameters.Count == 2) {
+                    bodyStatements.Add(SyntaxFactory.ParseStatement(
+                        "if ((object)" + paramNames[0] + " == null || (object)" + paramNames[1] + " == null) " +
+                        "return (object)" + paramNames[0] + " == (object)" + paramNames[1] + ";"));
+                } else if (methodName == "op_Inequality" && method.Parameters.Count == 2) {
+                    bodyStatements.Add(SyntaxFactory.ParseStatement(
+                        "if ((object)" + paramNames[0] + " == null || (object)" + paramNames[1] + " == null) " +
+                        "return (object)" + paramNames[0] + " != (object)" + paramNames[1] + ";"));
+                }
+
                 if (method.ReturnType.FullName == "System.Void") {
                     if (method.Parameters.Count == 0) {
                         bodyStatements.Add(SyntaxFactory.ParseStatement(internalFieldName + ".Invoke(null, null);"));
