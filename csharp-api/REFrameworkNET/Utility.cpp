@@ -21,6 +21,30 @@ System::Object^ Utility::BoxData(uintptr_t* ptr, TypeDefinition^ t, bool fromInv
         return nullptr;
     }
 
+    // Handle byref return types (e.g. ref T from get_Item on ring buffers).
+    // The native method returns an interior pointer (possibly tagged with bit 63)
+    // that points to a slot containing the actual object pointer. Dereference it.
+    if (t->IsByRef()) {
+        if (ptr == nullptr || *ptr == 0) {
+            return nullptr;
+        }
+
+        uintptr_t interior = *ptr;
+        interior &= ~(1ULL << 63); // strip tag bit if set
+
+        if (interior == 0 || IsBadReadPtr((void*)interior, sizeof(void*))) {
+            return nullptr;
+        }
+
+        auto elementType = t->GetElementType();
+        if (elementType == nullptr) {
+            elementType = t->GetUnderlyingType();
+        }
+
+        // Recurse with the dereferenced pointer and the unwrapped type
+        return BoxData((uintptr_t*)interior, elementType != nullptr ? elementType : t, fromInvoke, field);
+    }
+
     // Check the return type of the method and return it as a NativeObject if possible
     if (!t->IsValueType()) {
         if (ptr == nullptr || *ptr == 0) {

@@ -313,6 +313,25 @@ bool Method::HandleInvokeMember_Internal(System::Object^ obj, array<System::Obje
         return true;
     }
 
+    // Detect byref (ref T) returns via bit 63 tag.
+    // RE Engine tags interior pointers with bts rax, 0x3F. No valid user-space
+    // pointer on Windows x64 has bit 63 set, so this is a reliable indicator.
+    // The tagged pointer points into array/object storage; dereference it to get
+    // the actual data and pass that address to BoxData.
+    auto rawPtr = *(uintptr_t*)tempResult.bytes.data();
+
+    if (!returnType->IsValueType() && rawPtr != 0 && (rawPtr & (1ULL << 63)) != 0) {
+        uintptr_t interior = rawPtr & ~(1ULL << 63);
+
+        if (interior == 0 || IsBadReadPtr((void*)interior, sizeof(void*))) {
+            result = nullptr;
+            return true;
+        }
+
+        result = Utility::BoxData((uintptr_t*)interior, returnType, true);
+        return true;
+    }
+
     result = Utility::BoxData((uintptr_t*)tempResult.bytes.data(), returnType, true);
     return true;
 }
