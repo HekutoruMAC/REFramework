@@ -728,7 +728,9 @@ bool RETypeDefinition::is_by_ref() const {
         return true;
     }
 
-    static auto by_ref_method = runtime_typedef->get_method("get_IsByRef");
+    static auto by_ref_method = runtime_typedef->get_method("get_IsByRef") != nullptr ? 
+        runtime_typedef->get_method("get_IsByRef") : 
+        runtime_typedef->get_method("IsByRefImpl"); // MHWilds
 
     if (by_ref_method == nullptr) {
         // well...
@@ -770,7 +772,14 @@ bool RETypeDefinition::is_pointer() const {
         return false;
     }
 
-    static auto pointer_method = runtime_typedef->get_method("get_IsPointer");
+    static auto pointer_method = runtime_typedef->get_method("get_IsPointer") != nullptr ?
+        runtime_typedef->get_method("get_IsPointer") :
+        runtime_typedef->get_method("IsPointerImpl"); // MHWilds
+
+    if (pointer_method == nullptr) {
+        g_pointer_map[this] = false;
+        return false;
+    }
 
     g_pointer_map[this] = pointer_method->call<bool>(sdk::get_thread_context(), runtime_type);
 
