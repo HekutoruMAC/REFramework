@@ -118,21 +118,29 @@ void ResourceManager::update_pointers() {
         auto ip = *string_reference - 3;
         bool found = false;
 
-        for (auto i = 0; i < 10; ++i) {
-            hde64s hde{};
-            auto len = hde64_disasm((void*)ip, &hde);
-
-            if (hde.opcode == 0xE8) { // call
-                found = true;
-                break;
+        // Use exhaustive_decode. We need to follow control flow.
+        // newer games have been seen to have a hard jmp right after the string reference.
+        utility::exhaustive_decode((uint8_t*)ip, 100, [&](utility::ExhaustionContext& ctx) -> utility::ExhaustionResult {
+            if (found) {
+                return utility::ExhaustionResult::BREAK;
             }
 
-            ip += len;
-        }
+            if (ctx.instrux.Category == ND_CAT_CALL) {
+                if (*(uint8_t*)ctx.addr == 0xE8) {
+                    spdlog::info("[ResourceManager::create_resource] Found function at {:x}", ctx.addr);
+                    s_create_resource_fn = (decltype(s_create_resource_fn))utility::calculate_absolute(ctx.addr + 1);
+                    s_create_resource_reference = ctx.addr;
+                    found = true;
+                    return utility::ExhaustionResult::BREAK;
+                }
+
+                return utility::ExhaustionResult::STEP_OVER;
+            }
+
+            return utility::ExhaustionResult::CONTINUE;
+        });
 
         if (found) {
-            s_create_resource_fn = (decltype(s_create_resource_fn))utility::calculate_absolute(ip + 1);
-            s_create_resource_reference = ip;
             Resource::update_pointers();
             spdlog::info("[ResourceManager::create_resource] Found function at {:x}", (uintptr_t)s_create_resource_fn);
             
