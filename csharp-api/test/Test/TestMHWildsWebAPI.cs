@@ -69,11 +69,14 @@ class MHWildsWebAPI {
     }
 
     static void HandleRequest(HttpListenerContext ctx) {
+        if (s_cts.IsCancellationRequested) return;
+        bool calledGameApi = false;
         try {
             var path = ctx.Request.Url.AbsolutePath.TrimEnd('/').ToLower();
 
             // API endpoints
             if (path.StartsWith("/api")) {
+                calledGameApi = true;
                 var method = ctx.Request.HttpMethod;
 
                 // POST endpoints
@@ -83,6 +86,7 @@ class MHWildsWebAPI {
                         "/api/player/position" => SetPlayerPosition(ctx.Request),
                         "/api/meshes" => SetMeshVisibility(ctx.Request),
                         "/api/materials" => SetMaterialVisibility(ctx.Request),
+                        "/api/chat" => SendChat(ctx.Request),
                         "/api/explorer/field" => PostExplorerField(ctx.Request),
                         "/api/explorer/method" => PostExplorerMethod(ctx.Request),
                         "/api/explorer/batch" => PostExplorerBatch(ctx.Request),
@@ -100,6 +104,20 @@ class MHWildsWebAPI {
                     return;
                 }
 
+                // Plain-text endpoints (not JSON)
+                if (path == "/api/help") {
+                    var agentMd = Path.Combine(s_webRoot, "AGENT.md");
+                    if (File.Exists(agentMd)) {
+                        var text = File.ReadAllText(agentMd);
+                        ctx.Response.ContentType = "text/plain; charset=utf-8";
+                        ctx.Response.Headers.Add("Access-Control-Allow-Origin", "*");
+                        var bytes = Encoding.UTF8.GetBytes(text);
+                        ctx.Response.OutputStream.Write(bytes);
+                        ctx.Response.Close();
+                        return;
+                    }
+                }
+
                 // GET endpoints
                 object result = path switch {
                     "/api" => GetIndex(),
@@ -109,6 +127,7 @@ class MHWildsWebAPI {
                     "/api/singletons" => GetSingletonList(),
                     "/api/explorer/singletons" => GetExplorerSingletons(),
                     "/api/explorer/object" => GetExplorerObject(ctx.Request),
+                    "/api/explorer/summary" => GetExplorerSummary(ctx.Request),
                     "/api/explorer/field" => GetExplorerField(ctx.Request),
                     "/api/explorer/method" => GetExplorerMethod(ctx.Request),
                     "/api/explorer/array" => GetExplorerArray(ctx.Request),
@@ -122,6 +141,11 @@ class MHWildsWebAPI {
                     "/api/meshes" => GetMeshList(),
                     "/api/materials" => GetMaterials(),
                     "/api/map" => GetMapInfo(),
+                    "/api/chat" => GetChatHistory(),
+                    "/api/huntlog" => GetHuntLog(),
+                    "/api/palico" => GetPalicoStats(),
+                    "/api/localize" => ResolveGuid(ctx.Request),
+                    "/api/debug/byref" => DebugByRef(),
                     _ => null
                 };
 
@@ -137,14 +161,20 @@ class MHWildsWebAPI {
 
             // Static file serving
             ServeFile(ctx, path);
+        } catch (ObjectDisposedException) {
+            // Listener closed during hot-reload
         } catch (Exception e) {
-            ctx.Response.StatusCode = 500;
-            WriteJson(ctx.Response, new { error = e.Message });
+            try {
+                ctx.Response.StatusCode = 500;
+                WriteJson(ctx.Response, new { error = e.Message });
+            } catch (ObjectDisposedException) { }
         } finally {
             // Clean up thread-local managed objects created by game API calls.
-            // Must be called after work is done, not before — otherwise objects
-            // from the current request leak until this thread handles another request.
-            API.LocalFrameGC();
+            // Only call when we actually invoked game APIs — calling on a thread
+            // that only served static files can crash if there's no frame to GC.
+            if (calledGameApi) {
+                try { API.LocalFrameGC(); } catch { }
+            }
         }
     }
 
@@ -161,25 +191,31 @@ class MHWildsWebAPI {
             return;
         }
 
-        var ext = Path.GetExtension(fileName).ToLower();
-        ctx.Response.ContentType = s_mimeTypes.GetValueOrDefault(ext, "application/octet-stream");
-        var bytes = File.ReadAllBytes(filePath);
-        ctx.Response.OutputStream.Write(bytes);
-        ctx.Response.Close();
+        try {
+            var ext = Path.GetExtension(fileName).ToLower();
+            ctx.Response.ContentType = s_mimeTypes.GetValueOrDefault(ext, "application/octet-stream");
+            var bytes = File.ReadAllBytes(filePath);
+            ctx.Response.OutputStream.Write(bytes);
+            ctx.Response.Close();
+        } catch (ObjectDisposedException) { }
     }
 
     static void WriteJson(HttpListenerResponse response, object data) {
-        response.ContentType = "application/json";
-        response.Headers.Add("Access-Control-Allow-Origin", "*");
-        var json = JsonSerializer.SerializeToUtf8Bytes(data, new JsonSerializerOptions { WriteIndented = true });
-        response.OutputStream.Write(json);
-        response.Close();
+        try {
+            response.ContentType = "application/json";
+            response.Headers.Add("Access-Control-Allow-Origin", "*");
+            var json = JsonSerializer.SerializeToUtf8Bytes(data, new JsonSerializerOptions { WriteIndented = true });
+            response.OutputStream.Write(json);
+            response.Close();
+        } catch (ObjectDisposedException) {
+            // Listener was closed during hot-reload while request was in-flight
+        }
     }
 
     static object GetIndex() {
         return new {
             name = "MHWilds REFramework.NET Web API",
-            endpoints = new[] { "/api/player", "/api/camera", "/api/tdb", "/api/singletons", "/api/lobby", "/api/equipment", "/api/map",
+            endpoints = new[] { "/api/player", "/api/camera", "/api/tdb", "/api/singletons", "/api/lobby", "/api/equipment", "/api/map", "/api/huntlog", "/api/palico",
                 "/api/explorer/singletons", "/api/explorer/singleton",
                 "/api/explorer/object", "/api/explorer/field", "/api/explorer/method",
                 "/api/explorer/array", "/api/explorer/search", "/api/explorer/type",
@@ -500,6 +536,7 @@ class MHWildsWebAPI {
 
         string otomoName = null, seikretName = null;
         int? zenny = null, points = null;
+        uint? playTime = null;
         try {
             var sdm = API.GetManagedSingletonT<app.SaveDataManager>();
             if (sdm != null) {
@@ -514,6 +551,7 @@ class MHWildsWebAPI {
                                 try { zenny = basic.getMoney(); } catch { }
                                 try { points = basic.getPoint(); } catch { }
                             }
+                            try { playTime = saves[i].PlayTime; } catch { }
                             break;
                         }
                     }
@@ -528,6 +566,7 @@ class MHWildsWebAPI {
             maxHealth,
             zenny,
             points,
+            playTimeSeconds = playTime,
             position = new { x = posX, y = posY, z = posZ },
             generalPos = new { x = pl._GeneralPos.x, y = pl._GeneralPos.y, z = pl._GeneralPos.z },
             distToCamera = pl._DistToCamera,
@@ -804,6 +843,345 @@ class MHWildsWebAPI {
                 }
             }
             return new { error = $"MeshSetting for '{targetGo}' not found" };
+        } catch (Exception e) {
+            return new { error = e.Message };
+        }
+    }
+
+    static object SendChat(HttpListenerRequest request) {
+        try {
+            using var reader = new StreamReader(request.InputStream, request.ContentEncoding);
+            var body = reader.ReadToEnd();
+            var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+
+            var message = root.GetProperty("message").GetString();
+            if (string.IsNullOrEmpty(message)) return new { error = "message is required" };
+
+            var chatMgr = API.GetManagedSingletonT<app.ChatManager>();
+            if (chatMgr == null) return new { error = "ChatManager not available" };
+
+            var iobj = chatMgr as REFrameworkNET.IObject;
+            if (iobj == null) return new { error = "Cannot get IObject for ChatManager" };
+
+            iobj.Call("sendText", (object)message);
+
+            return new { ok = true, message };
+        } catch (Exception e) {
+            return new { error = e.Message };
+        }
+    }
+
+
+    static object ResolveGuid(HttpListenerRequest req) {
+        try {
+            var guidStr = req.QueryString["guid"];
+            if (string.IsNullOrEmpty(guidStr)) return new { error = "Missing 'guid' parameter" };
+
+            var msgTdef = REFrameworkNET.TDB.Get().FindType("via.gui.message");
+            if (msgTdef == null) return new { error = "via.gui.message type not found" };
+
+            var getMethod = msgTdef.GetMethod("get");
+            if (getMethod == null) return new { error = "via.gui.message.get method not found" };
+
+            var guidType = REFrameworkNET.TDB.Get().FindType("System.Guid");
+            if (guidType == null) return new { error = "System.Guid type not found" };
+
+            var parseMethod = guidType.GetMethod("Parse");
+            if (parseMethod == null) return new { error = "System.Guid.Parse not found" };
+
+            // Support comma-separated GUIDs for batch resolution
+            var guids = guidStr.Split(',');
+            if (guids.Length == 1) {
+                var guid = parseMethod.InvokeBoxed(null, null, new object[] { guidStr.Trim() });
+                if (guid == null) return new { error = "Failed to parse GUID" };
+                var text = getMethod.InvokeBoxed(typeof(string), null, new object[] { guid }) as string;
+                return new { guid = guidStr, text = text ?? "" };
+            }
+
+            var results = new List<object>();
+            foreach (var g in guids) {
+                var trimmed = g.Trim();
+                try {
+                    var guid = parseMethod.InvokeBoxed(null, null, new object[] { trimmed });
+                    var text = guid != null
+                        ? getMethod.InvokeBoxed(typeof(string), null, new object[] { guid }) as string
+                        : null;
+                    results.Add(new { guid = trimmed, text = text ?? "" });
+                } catch {
+                    results.Add(new { guid = trimmed, text = "", error = "Failed to parse" });
+                }
+            }
+            return new { count = results.Count, results };
+        } catch (Exception e) {
+            return new { error = e.Message };
+        }
+    }
+
+    static object DebugByRef() {
+        try {
+            var tdef = REFrameworkNET.TDB.Get().FindType("ace.cFixedRingBuffer`1<app.ChatDef.MessageElement>");
+            if (tdef == null) return new { error = "Type not found" };
+
+            var methods = tdef.GetMethods();
+            var results = new List<object>();
+            foreach (var m in methods) {
+                var name = m.GetName();
+                if (name == "get_Item" || name == "front" || name == "back" || name == "get_Size") {
+                    var retType = m.GetReturnType();
+                    results.Add(new {
+                        method = name,
+                        returnType = retType?.GetFullName(),
+                        isByRef = retType?.IsByRef(),
+                        isValueType = retType?.IsValueType(),
+                        isPointer = retType?.IsPointer(),
+                    });
+                }
+            }
+            return new { results };
+        } catch (Exception e) {
+            return new { error = e.Message };
+        }
+    }
+
+    static object GetChatHistory() {
+        try {
+            var chatMgr = API.GetManagedSingletonT<app.ChatManager>();
+            if (chatMgr is null) return new { error = "ChatManager not available" };
+
+            var logObj = (chatMgr as REFrameworkNET.IObject)?.GetField("_AllLog") as REFrameworkNET.IObject;
+            if (logObj is null) return new { error = "_AllLog is null" };
+
+            int size = 0;
+            try { var s = logObj.Call("get_Size"); if (s != null) size = (int)s; } catch { }
+
+            // Cache via.gui.message.get(Guid) for resolving system message GUIDs
+            REFrameworkNET.Method messageGetMethod = null;
+            try {
+                var msgTdef = REFrameworkNET.TDB.Get().FindType("via.gui.message");
+                messageGetMethod = msgTdef?.GetMethod("get");
+            } catch { }
+
+            var messages = new List<object>();
+
+            for (int i = 0; i < size; i++) {
+                try {
+                    var elem = logObj.Call("get_Item", (object)i) as REFrameworkNET.IObject;
+                    if (elem is null) continue;
+
+                    string typeName = null;
+                    try { typeName = elem.GetTypeDefinition()?.GetFullName(); } catch { }
+
+                    string msgType = null;
+                    try { msgType = elem.GetField("<MsgType>k__BackingField")?.ToString(); } catch { }
+
+                    string text = null, sender = null, target = null;
+                    bool isChatBase = typeName != null && (
+                        typeName.Contains("ChatBase") || typeName.Contains("ChatMessage") ||
+                        typeName.Contains("ChatSystemLog") || typeName.Contains("ChatSystemSendLog"));
+
+                    if (isChatBase) {
+                        try { sender = elem.GetField("_SenderName") as string; } catch { }
+                        try { target = elem.GetField("<SendTarget>k__BackingField")?.ToString(); } catch { }
+                    }
+
+                    // ChatMessage has <Text>k__BackingField for user-typed text
+                    if (typeName != null && typeName.Contains("ChatMessage")) {
+                        try { text = elem.GetField("<Text>k__BackingField") as string; } catch { }
+                    }
+
+                    // If no direct text, try resolving the MessageInfo GUID to localized text
+                    if (string.IsNullOrEmpty(text)) {
+                        try {
+                            var msgInfo = elem.GetField("<MessageInfo>k__BackingField") as REFrameworkNET.IObject;
+                            if (msgInfo != null && messageGetMethod != null) {
+                                var msgId = msgInfo.GetField("<MsgID>k__BackingField");
+                                if (msgId != null) {
+                                    text = messageGetMethod.InvokeBoxed(typeof(string), null, new object[] { msgId }) as string;
+                                }
+
+                                // Substitute {0}, {1}, etc. with paramToString() results
+                                if (!string.IsNullOrEmpty(text) && text.Contains("{0}")) {
+                                    try {
+                                        var paramArray = msgInfo.Call("paramToString") as REFrameworkNET.IObject;
+                                        if (paramArray != null) {
+                                            var arrTdef = paramArray.GetTypeDefinition();
+                                            int len = 0;
+                                            try { len = (int)paramArray.Call("get_Length"); } catch { }
+                                            for (int p = 0; p < len; p++) {
+                                                var paramVal = paramArray.Call("Get", (object)p);
+                                                var paramStr = (paramVal as REFrameworkNET.IObject)?.Call("ToString") as string
+                                                    ?? paramVal?.ToString() ?? "";
+                                                text = text.Replace($"{{{p}}}", paramStr);
+                                            }
+                                        }
+                                    } catch { }
+                                }
+
+                                // Strip markup tags: <BOLD>x</BOLD> -> x, <PLURAL n "singular" "plural"> -> pick by n
+                                if (!string.IsNullOrEmpty(text)) {
+                                    text = System.Text.RegularExpressions.Regex.Replace(text, @"<BOLD>(.*?)</BOLD>", "$1");
+                                    text = System.Text.RegularExpressions.Regex.Replace(text, @"<PLURAL\s+(\d+)\s+""([^""]*)""\s+""([^""]*)"">",
+                                        m => m.Groups[1].Value == "1" ? m.Groups[2].Value : m.Groups[3].Value);
+                                    text = text.Replace("\r\n", " ");
+                                }
+                            }
+                        } catch { }
+                    }
+
+                    messages.Add(new {
+                        type = msgType ?? "unknown",
+                        sender = sender ?? "System",
+                        text = text ?? "",
+                        target,
+                        elementType = typeName
+                    });
+                } catch {
+                    // Skip this element
+                }
+            }
+
+            return new { count = messages.Count, messages };
+        } catch (Exception e) {
+            return new { error = e.Message };
+        }
+    }
+
+    // ── Hunt Log ──────────────────────────────────────────────────────
+
+    // Cache FixedId → monster name, built once from EnemyDef.ID enum
+    static Dictionary<int, string> s_monsterNames;
+
+    static Dictionary<int, string> GetMonsterNameMap() {
+        if (s_monsterNames != null) return s_monsterNames;
+        var map = new Dictionary<int, string>();
+        try {
+            for (int id = 0; id < 120; id++) {
+                try {
+                    var eid = (app.EnemyDef.ID)id;
+                    if (!app.EnemyDef.isBossID(eid)) continue;
+                    var fixedId = (int)app.EnemyDef.enemyId(eid);
+                    var name = app.EnemyDef.NameString(eid, 0, 0);
+                    if (!string.IsNullOrEmpty(name) && fixedId != 0)
+                        map[fixedId] = name;
+                } catch { }
+            }
+        } catch { }
+        if (map.Count > 0) s_monsterNames = map;
+        return map;
+    }
+
+    static object GetHuntLog() {
+        try {
+            var sdm = API.GetManagedSingletonT<app.SaveDataManager>();
+            if (sdm == null) return new { error = "SaveDataManager not available" };
+
+            var saves = sdm.UserSaveData;
+            if (saves == null) return new { error = "No save data" };
+
+            app.savedata.cUserSaveParam activeSave = null;
+            for (int i = 0; i < saves.Length; i++) {
+                if (saves[i] != null && saves[i].Active == 1) { activeSave = saves[i]; break; }
+            }
+            if (activeSave == null) return new { error = "No active save" };
+
+            var report = activeSave._EnemyReport;
+            if (report == null) return new { error = "EnemyReport not available" };
+
+            var bossArr = report._Boss;
+            if (bossArr == null) return new { error = "Boss report array not available" };
+
+            var nameMap = GetMonsterNameMap();
+            var monsters = new List<object>();
+
+            for (int i = 0; i < bossArr.Length; i++) {
+                var boss = bossArr[i];
+                if (boss == null) continue;
+
+                int hunt = 0, slay = 0, capture = 0;
+                try { hunt = boss.getHuntingNum(); } catch { }
+                try { slay = boss.getSlayingNum(); } catch { }
+                try { capture = boss.getCaptureNum(); } catch { }
+
+                if (hunt == 0 && slay == 0 && capture == 0) continue;
+
+                int fixedId = boss.FixedId;
+                string name = null;
+                nameMap.TryGetValue(fixedId, out name);
+
+                monsters.Add(new {
+                    fixedId,
+                    name = name ?? $"Monster {fixedId}",
+                    huntCount = hunt,
+                    slayCount = slay,
+                    captureCount = capture,
+                    totalCount = hunt + capture
+                });
+            }
+
+            return new { count = monsters.Count, monsters };
+        } catch (Exception e) {
+            return new { error = e.Message };
+        }
+    }
+
+    // ── Palico Stats ────────────────────────────────────────────────────
+
+    static object GetPalicoStats() {
+        try {
+            var om = API.GetManagedSingletonT<app.OtomoManager>();
+            if (om == null) return new { error = "OtomoManager not available" };
+
+            var otomoInfo = om.getMasterOtomoInfo();
+            if (otomoInfo == null || !otomoInfo.Valid) return new { error = "No palico info" };
+
+            var ctxHolder = otomoInfo.ContextHolder;
+            if (ctxHolder == null) return new { error = "No context holder" };
+
+            var otomoCtx = ctxHolder.Otomo;
+            if (otomoCtx == null) return new { error = "No otomo context" };
+
+            int? level = null;
+            float? hp = null, maxHp = null;
+
+            var statusMgr = otomoCtx.StatusManager;
+            if (statusMgr != null) {
+                try { level = statusMgr._Level; } catch { }
+
+                try {
+                    var healthMgr = statusMgr._HealthManager;
+                    if (healthMgr != null) {
+                        try { hp = healthMgr.Health; } catch { }
+                        try { maxHp = healthMgr.MaxHealth; } catch { }
+                    }
+                } catch { }
+            }
+
+            uint? attackMelee = null, attackRange = null, attributeValue = null;
+            int? defense = null, critical = null;
+            string attribute = null;
+
+            var paramMgr = statusMgr?.OtomoStatusParamManager;
+            if (paramMgr != null) {
+                try { attackMelee = paramMgr._Attack_Melee; } catch { }
+                try { attackRange = paramMgr._Attack_Range; } catch { }
+                try { defense = paramMgr._Defence; } catch { }
+                try { critical = paramMgr._Critical; } catch { }
+                try { attribute = paramMgr._Attribute.ToString(); } catch { }
+                try { attributeValue = paramMgr._AttributeValue; } catch { }
+            }
+
+            return new {
+                level,
+                health = hp,
+                maxHealth = maxHp,
+                attack = attackMelee,
+                rangedAttack = attackRange,
+                defense,
+                critical,
+                element = attribute,
+                elementValue = attributeValue
+            };
         } catch (Exception e) {
             return new { error = e.Message };
         }
@@ -1442,7 +1820,8 @@ class MHWildsWebAPI {
                         var next = new List<IObject>();
                         foreach (var obj in current) {
                             try {
-                                var easyArray = obj.As<_System.Array>();
+                                var easyArray = obj.TryAs<_System.Array>();
+                                if (easyArray == null) continue;
                                 int len = easyArray.Length;
                                 int end = Math.Min(offset + count, len);
                                 for (int i = offset; i < end; i++) {
@@ -1582,8 +1961,8 @@ class MHWildsWebAPI {
             if (obj == null) return new { error = "Could not resolve object" };
 
             var qs = request.QueryString;
-            bool noFields = qs["noFields"] == "true";
-            bool noMethods = qs["noMethods"] == "true";
+            bool noFields = string.Equals(qs["noFields"], "true", StringComparison.OrdinalIgnoreCase);
+            bool noMethods = string.Equals(qs["noMethods"], "true", StringComparison.OrdinalIgnoreCase);
             var filterFields = qs["fields"];   // comma-separated field names
             var filterMethods = qs["methods"]; // comma-separated method names
 
@@ -1706,6 +2085,86 @@ class MHWildsWebAPI {
         }
     }
 
+    static object GetExplorerSummary(HttpListenerRequest request) {
+        try {
+            var obj = ResolveObject(request);
+            if (obj == null) return new { error = "Could not resolve object" };
+
+            var tdef = obj.GetTypeDefinition();
+            var typeName = tdef.GetFullName();
+
+            // Short type name helper: strip namespaces, clean backtick generics
+            // "System.Collections.Generic.List`1<app.Foo.Bar>" → "List<Bar>"
+            static string ShortType(string fullName) {
+                if (fullName == null) return "?";
+                // Strip namespaces inside generic args first
+                var result = System.Text.RegularExpressions.Regex.Replace(
+                    fullName, @"[\w]+\.", m => {
+                        // Only strip if it looks like a namespace segment (lowercase or known prefixes)
+                        var seg = m.Value.TrimEnd('.');
+                        if (seg == "System" || seg == "Collections" || seg == "Generic" ||
+                            seg == "app" || seg == "ace" || seg == "via" || seg == "soundlib" ||
+                            seg.Contains("_") || char.IsLower(seg[0]))
+                            return "";
+                        return m.Value;
+                    });
+                // Clean up generic backtick: "List`1<Foo>" → "List<Foo>"
+                result = System.Text.RegularExpressions.Regex.Replace(result, @"`\d+", "");
+                return result;
+            }
+
+            // Fields: "name: ShortType" or "name: ShortType = value" for primitives
+            var fields = new List<Field>();
+            for (var parent = tdef; parent != null; parent = parent.ParentType)
+                fields.AddRange(parent.GetFields());
+            fields.Sort((a, b) => a.GetName().CompareTo(b.GetName()));
+
+            var fieldLines = new List<string>();
+            foreach (var field in fields) {
+                var ft = field.GetType();
+                var ftName = ft != null ? ft.GetFullName() : "?";
+                bool isValueType = ft != null && ft.IsValueType();
+                string line = field.GetName() + ": " + ShortType(ftName);
+                if (field.IsStatic()) line += " [static]";
+                if (ft != null && (isValueType || ftName == "System.String")) {
+                    try {
+                        var val = ReadFieldValueAsString(obj, field, ft);
+                        if (val != null) line += " = " + val;
+                    } catch { }
+                }
+                fieldLines.Add(line);
+            }
+
+            // Methods: "name(ParamType, ...) → ReturnType" but skip .ctor, .cctor, dupes
+            var methods = new List<Method>();
+            for (var parent = tdef; parent != null; parent = parent.ParentType)
+                methods.AddRange(parent.GetMethods());
+            methods.Sort((a, b) => a.GetName().CompareTo(b.GetName()));
+            methods.RemoveAll(m => m.GetParameters().Exists(p => p.Type.Name.Contains("!")));
+
+            var seen = new HashSet<string>();
+            var methodLines = new List<string>();
+            foreach (var method in methods) {
+                var name = method.GetName();
+                if (name == ".ctor" || name == ".cctor" || name == "Finalize" || name == "MemberwiseClone") continue;
+                if (name == "Equals" || name == "GetHashCode" || name == "GetType") continue;
+                // Skip compiler-generated lambda methods (noise)
+                if (name.Contains(">g__") || name.Contains("<>")) continue;
+
+                var ps = method.GetParameters();
+                var paramStr = string.Join(", ", ps.Select(p => ShortType(p.Type.GetFullName())));
+                var retType = method.GetReturnType();
+                var retStr = retType != null ? ShortType(retType.GetFullName()) : "Void";
+                var line = $"{name}({paramStr}) → {retStr}";
+                if (seen.Add(line)) methodLines.Add(line);
+            }
+
+            return new { typeName, fields = fieldLines, methods = methodLines };
+        } catch (Exception e) {
+            return new { error = e.Message };
+        }
+    }
+
     static object GetExplorerField(HttpListenerRequest request) {
         try {
             var obj = ResolveObject(request);
@@ -1757,11 +2216,9 @@ class MHWildsWebAPI {
 
             if (targetMethod == null) return new { error = "Method not found" };
 
-            // Only invoke getters (0 params, name starts with get_/Get or is ToString)
+            // Only invoke 0-parameter methods (getters, ToString, or other read-only calls)
             var ps = targetMethod.GetParameters();
-            if (ps.Count != 0) return new { error = "Method has parameters, cannot invoke" };
-            if (!targetMethod.Name.StartsWith("get_") && !targetMethod.Name.StartsWith("Get") && targetMethod.Name != "ToString")
-                return new { error = "Method is not a getter" };
+            if (ps.Count != 0) return new { error = "Method has parameters, use invoke_method instead" };
 
             object result = null;
             obj.HandleInvokeMember_Internal(targetMethod, null, ref result);
@@ -1919,13 +2376,22 @@ class MHWildsWebAPI {
 
             var parentT = tdef.ParentType;
             var declaringT = tdef.DeclaringType;
+            var qs = request.QueryString;
+            bool includeInherited = string.Equals(qs["includeInherited"], "true", StringComparison.OrdinalIgnoreCase);
+            bool noFields = string.Equals(qs["noFields"], "true", StringComparison.OrdinalIgnoreCase);
+            bool noMethods = string.Equals(qs["noMethods"], "true", StringComparison.OrdinalIgnoreCase);
 
-            // Collect fields from type hierarchy
+            // Collect fields — own type only by default, full hierarchy if requested
             var fields = new List<Field>();
-            for (var parent = tdef; parent != null; parent = parent.ParentType) {
-                fields.AddRange(parent.GetFields());
+            if (!noFields) {
+                if (includeInherited) {
+                    for (var parent = tdef; parent != null; parent = parent.ParentType)
+                        fields.AddRange(parent.GetFields());
+                } else {
+                    fields.AddRange(tdef.GetFields());
+                }
+                fields.Sort((a, b) => a.GetName().CompareTo(b.GetName()));
             }
-            fields.Sort((a, b) => a.GetName().CompareTo(b.GetName()));
 
             var fieldList = new List<object>();
             foreach (var field in fields) {
@@ -1943,38 +2409,61 @@ class MHWildsWebAPI {
                 });
             }
 
-            // Collect methods from type hierarchy
+            // Collect methods — own type only by default, full hierarchy if requested
             var methods = new List<Method>();
-            for (var parent = tdef; parent != null; parent = parent.ParentType) {
-                methods.AddRange(parent.GetMethods());
+            if (!noMethods) {
+                if (includeInherited) {
+                    for (var parent = tdef; parent != null; parent = parent.ParentType)
+                        methods.AddRange(parent.GetMethods());
+                } else {
+                    methods.AddRange(tdef.GetMethods());
+                }
+                methods.Sort((a, b) => a.GetName().CompareTo(b.GetName()));
+                methods.RemoveAll(m => m.GetParameters().Exists(p => p.Type.Name.Contains("!")));
+                // Filter noise: constructors, finalizers, common inherited methods, compiler-generated
+                methods.RemoveAll(m => {
+                    var name = m.GetName();
+                    return name == ".ctor" || name == ".cctor" || name == "Finalize" || name == "MemberwiseClone"
+                        || name == "Equals" || name == "GetHashCode" || name == "GetType"
+                        || name.StartsWith("<")
+                        || name.Contains(">g__") || name.Contains("<>");
+                });
             }
-            methods.Sort((a, b) => a.GetName().CompareTo(b.GetName()));
-            methods.RemoveAll(m => m.GetParameters().Exists(p => p.Type.Name.Contains("!")));
 
-            var methodList = new List<object>();
+            var seen = new HashSet<string>();
+            var dedupedMethods = new List<(string returnType, string signature)>();
             foreach (var method in methods) {
                 var returnT = method.GetReturnType();
                 var returnTName = returnT != null ? returnT.GetFullName() : "void";
-
-                var ps = method.GetParameters();
-                var paramList = new List<object>();
-                foreach (var p in ps) {
-                    paramList.Add(new {
-                        type = p.Type.GetFullName(),
-                        name = p.Name
-                    });
-                }
-
-                bool isGetter = (method.Name.StartsWith("get_") || method.Name.StartsWith("Get") || method.Name == "ToString") && ps.Count == 0;
-
-                methodList.Add(new {
-                    name = method.GetName(),
-                    returnType = returnTName,
-                    parameters = paramList,
-                    isGetter,
-                    signature = method.GetMethodSignature()
-                });
+                var sig = method.GetMethodSignature();
+                if (!seen.Add(sig)) continue;
+                dedupedMethods.Add((returnTName, sig));
             }
+
+            // Collapse repetitive auto-generated methods (names differing only in numbers).
+            // Normalize full signature (digit runs → #), if group has >2 members show one + count.
+            var methodList = new List<object>();
+            var groups = dedupedMethods.GroupBy(m =>
+                System.Text.RegularExpressions.Regex.Replace(m.signature, @"\d+", "#")
+            ).ToList();
+
+            foreach (var group in groups) {
+                var first = group.First();
+                if (group.Count() > 2) {
+                    methodList.Add(new {
+                        returnType = first.returnType,
+                        signature = first.signature,
+                        similarCount = group.Count()
+                    });
+                } else {
+                    foreach (var m in group)
+                        methodList.Add(new { returnType = m.returnType, signature = m.signature });
+                }
+            }
+
+            // Count totals (before filtering) for informational purposes
+            int totalFields = noFields ? tdef.GetFields().Count : fieldList.Count;
+            int totalMethods = noMethods ? tdef.GetMethods().Count : methodList.Count;
 
             return new {
                 fullName = tdef.GetFullName(),
@@ -1984,6 +2473,8 @@ class MHWildsWebAPI {
                 size = tdef.GetSize(),
                 parentType = parentT?.GetFullName(),
                 declaringType = declaringT?.GetFullName(),
+                fieldCount = totalFields,
+                methodCount = totalMethods,
                 fields = fieldList,
                 methods = methodList
             };

@@ -15,6 +15,13 @@ function fmt(n, d = 2) {
 
 function esc(s) { return s ? s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;') : ''; }
 
+function formatPlayTime(s) {
+  if (s == null) return '?';
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return `${h}h ${m}m`;
+}
+
 function hpColor(pct) {
   if (pct > 0.6) return '#3fb950';
   if (pct > 0.3) return '#d29922';
@@ -87,6 +94,7 @@ async function updatePlayer() {
         (d.seikretName ? row('Seikret', d.seikretName) : '') +
         (d.zenny != null ? row('Zenny', d.zenny.toLocaleString() + 'z') : '') +
         (d.points != null ? row('Points', d.points.toLocaleString() + 'p') : '') +
+        (d.playTimeSeconds != null ? row('Play Time', formatPlayTime(d.playTimeSeconds)) : '') +
         `<div class='hp-bar-bg'>
           <div class='hp-bar' id='hp-bar-fill'><span id='hp-bar-label'></span></div>
         </div>
@@ -120,6 +128,7 @@ async function updatePlayer() {
         else if (lbl === 'Level') val.textContent = d.level;
         else if (lbl === 'Zenny') val.textContent = d.zenny != null ? d.zenny.toLocaleString() + 'z' : '?';
         else if (lbl === 'Points') val.textContent = d.points != null ? d.points.toLocaleString() + 'p' : '?';
+        else if (lbl === 'Play Time') val.textContent = d.playTimeSeconds != null ? formatPlayTime(d.playTimeSeconds) : '?';
         else if (lbl === 'Position') val.textContent = `${fmt(d.position.x)}, ${fmt(d.position.y)}, ${fmt(d.position.z)}`;
         else if (lbl === 'Dist to Camera') val.textContent = fmt(d.distToCamera);
       }
@@ -602,6 +611,153 @@ async function updateMeshes() {
   }
 }
 
+// ── Hunt Log ────────────────────────────────────────────────────────
+
+async function updateHuntLog() {
+  try {
+    const d = await fetchJson('/api/huntlog');
+    const el = document.getElementById('huntlog-content');
+    setDot('huntlog-card', !d.error);
+    if (d.error) { el.innerHTML = `<span class='error-msg'>${d.error}</span>`; return; }
+
+    document.getElementById('huntlog-count').textContent = `(${d.count})`;
+
+    if (!d.monsters || d.monsters.length === 0) {
+      el.innerHTML = `<span class='error-msg'>No hunts recorded</span>`;
+      return;
+    }
+
+    // Sort by total count descending
+    d.monsters.sort((a, b) => b.totalCount - a.totalCount);
+
+    el.innerHTML = d.monsters.map(m => {
+      return `<div class='huntlog-row'>
+        <span class='huntlog-name'>${esc(m.name)}</span>
+        <span class='huntlog-counts'>
+          <span class='huntlog-badge hunt' title='Hunted'>${m.huntCount}</span>
+          <span class='huntlog-badge slay' title='Slain'>${m.slayCount}</span>
+          <span class='huntlog-badge capture' title='Captured'>${m.captureCount}</span>
+        </span>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    setDot('huntlog-card', false);
+    document.getElementById('huntlog-content').innerHTML = `<span class='error-msg'>${e.message}</span>`;
+  }
+}
+
+// ── Palico Stats ────────────────────────────────────────────────────
+
+async function updatePalico() {
+  try {
+    const d = await fetchJson('/api/palico');
+    const el = document.getElementById('palico-content');
+    setDot('palico-card', !d.error);
+    if (d.error) { el.innerHTML = `<span class='error-msg'>${d.error}</span>`; return; }
+
+    const pct = d.maxHealth > 0 ? d.health / d.maxHealth : 0;
+    const color = hpColor(pct);
+
+    let html = row('Level', d.level ?? '?', 'highlight');
+    html += `<div class='hp-bar-bg'><div class='hp-bar' style='width:${(pct * 100).toFixed(0)}%;background:${color}'><span>${fmt(d.health, 0)} / ${fmt(d.maxHealth, 0)}</span></div></div>`;
+
+    html += `<div class='equip-stats' style='margin-top:8px'>`;
+    html += `<div class='equip-stat'><span class='equip-stat-label'>ATK</span><span class='equip-stat-val'>${d.attack ?? '?'}</span></div>`;
+    html += `<div class='equip-stat'><span class='equip-stat-label'>Ranged</span><span class='equip-stat-val'>${d.rangedAttack ?? '?'}</span></div>`;
+    html += `<div class='equip-stat'><span class='equip-stat-label'>DEF</span><span class='equip-stat-val'>${d.defense ?? '?'}</span></div>`;
+    html += `<div class='equip-stat'><span class='equip-stat-label'>Affinity</span><span class='equip-stat-val' style='color:${(d.critical || 0) > 0 ? '#3fb950' : (d.critical || 0) < 0 ? '#f85149' : '#c9d1d9'}'>${(d.critical || 0) > 0 ? '+' : ''}${d.critical ?? 0}%</span></div>`;
+    if (d.element && d.element !== 'NONE') {
+      const elemColor = elementColors[d.element] || '#8b949e';
+      html += `<div class='equip-stat'><span class='equip-stat-label' style='color:${elemColor}'>${d.element}</span><span class='equip-stat-val' style='color:${elemColor}'>${d.elementValue ?? 0}</span></div>`;
+    }
+    html += `</div>`;
+
+    el.innerHTML = html;
+  } catch(e) {
+    setDot('palico-card', false);
+    document.getElementById('palico-content').innerHTML = `<span class='error-msg'>${e.message}</span>`;
+  }
+}
+
+// ── Chat ────────────────────────────────────────────────────────────
+
+let lastChatCount = -1;
+
+async function updateChat() {
+  try {
+    const d = await fetchJson('/api/chat');
+    const log = document.getElementById('chat-log');
+    setDot('chat-card', !d.error);
+    if (d.error) { log.innerHTML = `<span class='error-msg'>${d.error}</span>`; return; }
+
+    document.getElementById('chat-count').textContent = `(${d.count})`;
+
+    // Only rebuild if count changed
+    if (d.count === lastChatCount) return;
+    lastChatCount = d.count;
+
+    if (!d.messages || d.messages.length === 0) {
+      log.innerHTML = `<span class='error-msg'>No messages</span>`;
+      return;
+    }
+
+    log.innerHTML = d.messages.map(m => {
+      const time = m.time ? `<span class='chat-time'>${m.time}</span>` : '';
+      return `<div class='chat-msg'>
+        ${time}<span class='chat-sender'>${esc(m.sender)}</span>
+        <span class='chat-text'>${esc(m.text)}</span>
+      </div>`;
+    }).join('');
+
+    // Auto-scroll to bottom
+    log.scrollTop = log.scrollHeight;
+  } catch(e) {
+    setDot('chat-card', false);
+  }
+}
+
+(function() {
+  const form = document.getElementById('chat-form');
+  const input = document.getElementById('chat-input');
+  const status = document.getElementById('chat-status');
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msg = input.value.trim();
+    if (!msg) return;
+
+    const btn = form.querySelector('.chat-send');
+    btn.disabled = true;
+    status.textContent = '';
+
+    try {
+      const resp = await fetch(API_BASE + '/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg })
+      });
+      const d = await resp.json();
+
+      if (d.ok) {
+        status.textContent = 'Sent!';
+        status.className = 'chat-status chat-ok';
+        input.value = '';
+        lastChatCount = -1; // force refresh
+        updateChat();
+      } else {
+        status.textContent = d.error || 'Failed';
+        status.className = 'chat-status chat-err';
+      }
+    } catch(err) {
+      status.textContent = err.message;
+      status.className = 'chat-status chat-err';
+    }
+
+    btn.disabled = false;
+    setTimeout(() => { status.textContent = ''; }, 3000);
+  });
+})();
+
 async function poll() {
   pollCount++;
   const start = performance.now();
@@ -620,12 +776,18 @@ updateEquipment();
 updateInventory();
 updateMeshes();
 updateMap();
+updateChat();
+updateHuntLog();
+updatePalico();
 setInterval(updateLobby, 5000);
 setInterval(updateWeather, 5000);
 setInterval(updateEquipment, 5000);
 setInterval(updateInventory, 5000);
 setInterval(updateMeshes, 5000);
 setInterval(updateMap, 5000);
+setInterval(updateChat, 3000);
+setInterval(updateHuntLog, 10000);
+setInterval(updatePalico, 5000);
 
 // Initial fast poll
 poll();

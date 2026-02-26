@@ -135,6 +135,35 @@ h1 { color: #58a6ff; margin-bottom: 8px; font-size: 1.6em; }
 .mesh-label { color: #c9d1d9; flex: 1; }
 .mesh-name { color: #484f58; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 0.8em; }
 
+/* ── Chat styles ─────────────────────────────────────────────────── */
+.chat-log {
+  display: flex; flex-direction: column; gap: 2px;
+  max-height: 280px; overflow-y: auto; margin-bottom: 10px;
+  padding: 6px; background: #0d1117; border: 1px solid #21262d; border-radius: 6px;
+  min-height: 60px;
+}
+.chat-msg { font-size: 0.85em; padding: 3px 6px; border-radius: 4px; line-height: 1.4; }
+.chat-msg:hover { background: #161b22; }
+.chat-time { color: #484f58; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 0.8em; margin-right: 6px; }
+.chat-sender { color: #58a6ff; font-weight: 600; margin-right: 6px; }
+.chat-text { color: #c9d1d9; }
+.chat-form { display: flex; gap: 8px; }
+.chat-input {
+  flex: 1; padding: 8px 12px;
+  background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+  color: #c9d1d9; font-size: 0.9em; outline: none;
+}
+.chat-input:focus { border-color: #58a6ff; }
+.chat-send {
+  padding: 8px 16px; background: #238636; border: 1px solid #2ea043; border-radius: 6px;
+  color: #fff; font-size: 0.85em; font-weight: 600; cursor: pointer;
+}
+.chat-send:hover { background: #2ea043; }
+.chat-send:disabled { opacity: 0.5; cursor: not-allowed; }
+.chat-status { font-size: 0.8em; margin-top: 6px; min-height: 1.2em; }
+.chat-ok { color: #3fb950; }
+.chat-err { color: #f85149; }
+
 /* ── Lobby styles ────────────────────────────────────────────────── */
 .lobby-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 6px; max-height: 500px; overflow-y: auto; }
 .lobby-member {
@@ -188,6 +217,24 @@ h1 { color: #58a6ff; margin-bottom: 8px; font-size: 1.6em; }
 .oe-static { color: #c04000; }
 .oe-value { color: #ce9178; }
 .oe-null { color: #8b949e; font-style: italic; }
+
+/* ── Hunt Log styles ─────────────────────────────────────────────── */
+.huntlog-list { display: flex; flex-direction: column; gap: 3px; max-height: 400px; overflow-y: auto; }
+.huntlog-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 5px 10px; background: #0d1117; border: 1px solid #21262d; border-radius: 6px;
+  font-size: 0.85em;
+}
+.huntlog-name { color: #c9d1d9; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.huntlog-counts { display: flex; gap: 6px; margin-left: 8px; flex-shrink: 0; }
+.huntlog-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 24px; padding: 1px 6px; border-radius: 10px;
+  font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 0.8em; font-weight: 600;
+}
+.huntlog-badge.hunt { background: #1f3d2a; color: #3fb950; }
+.huntlog-badge.slay { background: #3d1f1f; color: #f85149; }
+.huntlog-badge.capture { background: #2d3a1f; color: #d29922; }
 
 /* ── Tooltip ─────────────────────────────────────────────────────── */
 .tip {
