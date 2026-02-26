@@ -21,6 +21,11 @@ public interface class IObject : public IProxyable, public System::IEquatable<IO
     generic <typename T>
     T As();
 
+    // Safe version of As<T> that checks type compatibility first.
+    // Returns default(T) if the object's type is not derived from T's type.
+    generic <typename T>
+    T TryAs();
+
     IProxy^ GetProxy(System::Type^ proxyType);
 };
 }

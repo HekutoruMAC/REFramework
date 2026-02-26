@@ -27,6 +27,11 @@ public:
     generic <typename T>
     virtual T As() abstract = 0;
 
+    // Safe version of As<T> that checks type compatibility first.
+    // Returns default(T) if the object's type is not derived from T's type.
+    generic <typename T>
+    virtual T TryAs();
+
     virtual IProxy^ GetProxy(System::Type^ type) {
         return ProxyPool::GetIfExists(this, type);
     }

@@ -74,6 +74,11 @@ public:
         return Instance->As<T>();
     }
 
+    generic <typename T>
+    virtual T TryAs() {
+        return Instance->TryAs<T>();
+    }
+
     virtual IProxy^ GetProxy(System::Type^ type) {
         return Instance->GetProxy(type);
     }

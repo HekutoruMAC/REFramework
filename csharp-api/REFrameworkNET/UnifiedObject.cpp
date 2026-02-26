@@ -109,6 +109,28 @@ namespace REFrameworkNET {
         return false;
     }
 
+    generic <typename T>
+    T UnifiedObject::TryAs() {
+        auto tdef = GetTypeDefinition();
+        if (tdef == nullptr) {
+            return T();
+        }
+
+        // Get the target TypeDefinition from the generated type's static REFType field
+        auto targetDotnetType = T::typeid;
+        auto refTypeField = targetDotnetType->GetField("REFType",
+            System::Reflection::BindingFlags::Public | System::Reflection::BindingFlags::Static);
+
+        if (refTypeField != nullptr) {
+            auto targetTdef = dynamic_cast<REFrameworkNET::TypeDefinition^>(refTypeField->GetValue(nullptr));
+            if (targetTdef != nullptr && !tdef->IsDerivedFrom(targetTdef)) {
+                return T();
+            }
+        }
+
+        return As<T>();
+    }
+
     bool UnifiedObject::TrySetMember(System::Dynamic::SetMemberBinder^ binder, System::Object^ value)
     {
         auto memberName = binder->Name;
