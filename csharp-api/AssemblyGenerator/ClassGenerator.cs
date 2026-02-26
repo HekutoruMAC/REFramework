@@ -36,6 +36,34 @@ public class ClassGenerator {
     
     private List<FieldDeclarationSyntax> internalFieldDeclarations = [];
 
+    private static readonly Dictionary<string, (string WrapperName, int ArgCount)> genericCollectionMap = new()
+    {
+        // List types → IList
+        ["System.Collections.Generic.List"] = ("REFrameworkNET.Collections.IList", 1),
+        ["System.Collections.Generic.IList"] = ("REFrameworkNET.Collections.IList", 1),
+
+        // Collection types → ICollection
+        ["System.Collections.Generic.ICollection"] = ("REFrameworkNET.Collections.ICollection", 1),
+        ["System.Collections.Generic.HashSet"] = ("REFrameworkNET.Collections.ICollection", 1),
+        ["System.Collections.Generic.LinkedList"] = ("REFrameworkNET.Collections.ICollection", 1),
+        ["System.Collections.Generic.Queue"] = ("REFrameworkNET.Collections.IReadOnlyCollection", 1),
+        ["System.Collections.Generic.Stack"] = ("REFrameworkNET.Collections.IReadOnlyCollection", 1),
+
+        // Dictionary types → IDictionary
+        ["System.Collections.Generic.Dictionary"] = ("REFrameworkNET.Collections.IDictionary", 2),
+        ["System.Collections.Generic.IDictionary"] = ("REFrameworkNET.Collections.IDictionary", 2),
+        ["System.Collections.Generic.SortedList"] = ("REFrameworkNET.Collections.IDictionary", 2),
+
+        // Enumerable/Enumerator
+        ["System.Collections.Generic.IEnumerable"] = ("REFrameworkNET.Collections.IEnumerable", 1),
+        ["System.Collections.Generic.IEnumerator"] = ("REFrameworkNET.Collections.IEnumerator", 1),
+
+        // Read-only types
+        ["System.Collections.Generic.IReadOnlyCollection"] = ("REFrameworkNET.Collections.IReadOnlyCollection", 1),
+        ["System.Collections.Generic.IReadOnlyList"] = ("REFrameworkNET.Collections.IReadOnlyList", 1),
+        ["System.Collections.Generic.IReadOnlyDictionary"] = ("REFrameworkNET.Collections.IReadOnlyDictionary", 2),
+    };
+
     public TypeDeclarationSyntax? TypeDeclaration {
         get {
             return typeDeclaration;
@@ -166,6 +194,68 @@ public class ClassGenerator {
             targetTypeName = value;
         }
 
+        if (ogTargetTypename.Contains('`') && ogTargetTypename.Contains('<') && !ogTargetTypename.Contains('!'))
+        {
+            int backtickPos = ogTargetTypename.IndexOf('`');
+            string baseName = ogTargetTypename.Substring(0, backtickPos);
+
+            int openAngle = ogTargetTypename.IndexOf('<');
+            int closeAngle = ogTargetTypename.LastIndexOf('>');
+
+            if (openAngle >= 0 && closeAngle > openAngle)
+            {
+                string argsStr = ogTargetTypename.Substring(openAngle + 1, closeAngle - openAngle - 1);
+                var typeArgNames = SplitGenericArgs(argsStr);
+
+                var resolvedArgStrings = new List<string>();
+                bool allResolved = true;
+                var tdb = REFrameworkNET.API.GetTDB();
+
+                foreach (var argName in typeArgNames)
+                {
+                    var argType = tdb.FindType(argName);
+                    if (argType != null)
+                    {
+                        var resolvedArg = MakeProperType(argType, containingType);
+                        var resolvedStr = resolvedArg.ToFullString().Trim();
+                        if (resolvedStr == "void")
+                        {
+                            allResolved = false;
+                            break;
+                        }
+                        resolvedArgStrings.Add(resolvedStr);
+                    }
+                    else
+                    {
+                        allResolved = false;
+                        break;
+                    }
+                }
+
+                if (allResolved && resolvedArgStrings.Count > 0)
+                {
+                    // Nullable<T> unwrap: interfaces are already nullable reference types
+                    if (baseName == "System.Nullable" && resolvedArgStrings.Count == 1)
+                    {
+                        outSyntax = SyntaxFactory.ParseTypeName(resolvedArgStrings[0]);
+                        return outSyntax;
+                    }
+
+                    // Map to collection wrapper interface if known
+                    if (genericCollectionMap.TryGetValue(baseName, out var mapping) && 
+                        resolvedArgStrings.Count == mapping.ArgCount)
+                    {
+                        var fullGenericType = $"global::{mapping.WrapperName}<{string.Join(", ", resolvedArgStrings)}>";
+                        outSyntax = SyntaxFactory.ParseTypeName(fullGenericType);
+                        return outSyntax;
+                    }
+                }
+            }
+
+            // Generic type we can't resolve — fall back to object
+            return SyntaxFactory.PredefinedType(SyntaxFactory.Token(SyntaxKind.ObjectKeyword));
+        }
+
         // Check for easily convertible types like System.Single, System.Int32, etc.
         switch (targetTypeName) { 
             case "System.Single":
@@ -232,7 +322,34 @@ public class ClassGenerator {
         
         return outSyntax;
     }
-    
+
+    private static List<string> SplitGenericArgs(string argsStr)
+    {
+        var result = new List<string>();
+        int depth = 0;
+        int start = 0;
+
+        for (int i = 0; i < argsStr.Length; i++)
+        {
+            if (argsStr[i] == '<')
+            {
+                depth++;
+            }
+            else if (argsStr[i] == '>')
+            {
+                depth--;
+            }
+            else if (argsStr[i] == ',' && depth == 0)
+            {
+                result.Add(argsStr.Substring(start, i - start).Trim());
+                start = i + 1;
+            }
+        }
+
+        result.Add(argsStr.Substring(start).Trim());
+        return result;
+    }
+
     static readonly SortedSet<string> invalidMethodNames = [
         "Finalize",
         //"MemberwiseClone",
