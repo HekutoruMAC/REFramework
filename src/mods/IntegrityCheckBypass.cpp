@@ -1278,6 +1278,41 @@ void IntegrityCheckBypass::immediate_patch_dd2() {
     }
 }
 
+void IntegrityCheckBypass::immediate_patch_re9() {
+    spdlog::info("[IntegrityCheckBypass]: Scanning RE9...");
+
+    const auto game = utility::get_executable();
+    const auto game_size = utility::get_module_size(game).value_or(0);
+    const auto game_end = (uintptr_t)game + game_size;
+
+    static std::vector<Patch::Ptr> sus_constant_patches2{};
+
+    // Fixes calls into BushClover. BushClover is a manually mapped DLL in the RE Engine that causes a fake UD2 exception
+    // using a manually crafted exception that calls into KiUserExceptionDispatcher, triggered at will by the consumer.
+    // This is very similar to the crash below this one that causes UD2s (via replacing job pointers to UD2s), but it's not the same.
+    for (auto ref = utility::scan(game, "E1 53 BD 4C 75 ?");
+         ref.has_value();
+         ref = utility::scan(*ref + 1, (game_end - (*ref + 1)) - 0x1000, "E1 53 BD 4C 75 ?"))
+    {
+        // Patch to 0x1337BEEF
+        sus_constant_patches2.emplace_back(Patch::create(*ref, { 0xEF, 0xBE, 0x37, 0x13 }, true));
+    }
+
+    // This is hidden within RenderTaskEnd. RenderTaskEnd is interleaved with legitimate game code and integrity checks. Entire function is obfuscated.
+    // What they are doing is finding UD2 gadgets (even in the middle of instructions) around the game and replace random thread scheduler jobs
+    // with pointers to the found UD2 function/gadget.
+    // This pattern will likely change in the next update, we don't know what the invariants are yet without another sample.
+    auto thread_scheduler_corruptor = utility::scan(game, "48 89 74 08 08 48 89 F0");
+
+    if (thread_scheduler_corruptor) {
+        // Only patch out the mov [reg+reg*1+08], rsi.
+        static auto tspatch = Patch::create(*thread_scheduler_corruptor, { 0x90, 0x90, 0x90, 0x90, 0x90 }, true);
+        spdlog::info("[IntegrityCheckBypass]: Patched thread scheduler corruptor in RE9!");
+    } else {
+        spdlog::error("[IntegrityCheckBypass]: Could not find thread scheduler corruptor in RE9!");
+    }
+}
+
 void IntegrityCheckBypass::remove_stack_destroyer() {
     spdlog::info("[IntegrityCheckBypass]: Searching for stack destroyer...");
 
