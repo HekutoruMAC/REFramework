@@ -644,6 +644,9 @@ namespace REFrameworkNET {
 
         auto self = System::Reflection::Assembly::LoadFrom(System::Reflection::Assembly::GetExecutingAssembly()->Location);
 
+        // Wire up compiler error logging to REFramework's log
+        REFrameworkNET::Compiler::OnCompileError = gcnew System::Action<System::String^>(&REFrameworkNET::API::LogError);
+
         for each (System::String^ file in files) {
             System::Console::WriteLine(file);
 
