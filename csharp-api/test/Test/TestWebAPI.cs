@@ -9,7 +9,7 @@ using System.Threading;
 using REFrameworkNET;
 using REFrameworkNET.Attributes;
 
-class MHWildsWebAPI {
+class REFrameworkWebAPI {
     static HttpListener s_listener;
     static Thread s_thread;
     static CancellationTokenSource s_cts = new();
@@ -25,7 +25,7 @@ class MHWildsWebAPI {
     [PluginEntryPoint]
     public static void Main() {
         try {
-            var pluginDir = API.GetPluginDirectory(typeof(MHWildsWebAPI).Assembly);
+            var pluginDir = API.GetPluginDirectory(typeof(REFrameworkWebAPI).Assembly);
             s_webRoot = Path.Combine(pluginDir, "WebAPI");
 
             if (!Directory.Exists(s_webRoot)) {

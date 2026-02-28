@@ -542,23 +542,23 @@ if(REFRAMEWORK_REF_ASSEMBLIES_EXIST_MHWILDS) # build-csharp-test-mhwilds
 	set_dotnet_references(CSharpAPITestMHWilds "mhwilds" "${MHWILDS_DLLS}")
 
 endif()
-# Target: CSharpAPITestMHWildsWebAPI
+# Target: CSharpAPITestWebAPI
 if(REFRAMEWORK_REF_ASSEMBLIES_EXIST_MHWILDS) # build-csharp-test-mhwilds
-	set(CSharpAPITestMHWildsWebAPI_SOURCES
-		"test/Test/TestMHWildsWebAPI.cs"
+	set(CSharpAPITestWebAPI_SOURCES
+		"test/Test/TestWebAPI.cs"
 		cmake.toml
 	)
 
-	add_library(CSharpAPITestMHWildsWebAPI SHARED)
+	add_library(CSharpAPITestWebAPI SHARED)
 
-	target_sources(CSharpAPITestMHWildsWebAPI PRIVATE ${CSharpAPITestMHWildsWebAPI_SOURCES})
-	source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${CSharpAPITestMHWildsWebAPI_SOURCES})
+	target_sources(CSharpAPITestWebAPI PRIVATE ${CSharpAPITestWebAPI_SOURCES})
+	source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${CSharpAPITestWebAPI_SOURCES})
 
-	target_link_libraries(CSharpAPITestMHWildsWebAPI PUBLIC
+	target_link_libraries(CSharpAPITestWebAPI PUBLIC
 		csharp-api
 	)
 
-	set_target_properties(CSharpAPITestMHWildsWebAPI PROPERTIES
+	set_target_properties(CSharpAPITestWebAPI PROPERTIES
 		RUNTIME_OUTPUT_DIRECTORY_RELEASE
 			"${CMAKE_BINARY_DIR}/bin/"
 		RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO
@@ -579,8 +579,8 @@ if(REFRAMEWORK_REF_ASSEMBLIES_EXIST_MHWILDS) # build-csharp-test-mhwilds
 			ClassLibrary
 	)
 
-	set(CMKR_TARGET CSharpAPITestMHWildsWebAPI)
-	set_dotnet_references(CSharpAPITestMHWildsWebAPI "mhwilds" "${MHWILDS_DLLS}")
+	set(CMKR_TARGET CSharpAPITestWebAPI)
+	set_dotnet_references(CSharpAPITestWebAPI "mhwilds" "${MHWILDS_DLLS}")
 
 endif()
 # Target: CSharpAPITestRE9
