@@ -181,7 +181,7 @@ set_target_properties(REFCoreDeps PROPERTIES
 	DOTNET_SDK
 		Microsoft.NET.Sdk
 	DOTNET_TARGET_FRAMEWORK
-		net8.0-windows
+		net10.0-windows
 	VS_CONFIGURATION_TYPE
 		ClassLibrary
 )
@@ -221,6 +221,7 @@ set(csharp-api_SOURCES
 	"REFrameworkNET/Attributes/MethodHook.hpp"
 	"REFrameworkNET/Attributes/Plugin.hpp"
 	"REFrameworkNET/Callbacks.hpp"
+	"REFrameworkNET/Collections.hpp"
 	"REFrameworkNET/Field.hpp"
 	"REFrameworkNET/IObject.hpp"
 	"REFrameworkNET/IProxyable.hpp"
@@ -292,7 +293,7 @@ set_target_properties(csharp-api PROPERTIES
 	COMMON_LANGUAGE_RUNTIME
 		netcore
 	DOTNET_TARGET_FRAMEWORK
-		net8.0-windows
+		net10.0-windows
 	VS_GLOBAL_EnableManagedPackageReferenceSupport
 		true
 	VS_GLOBAL_ConcurrentGarbageCollection
@@ -362,7 +363,7 @@ set_target_properties(AssemblyGenerator PROPERTIES
 	DOTNET_SDK
 		Microsoft.NET.Sdk
 	DOTNET_TARGET_FRAMEWORK
-		net8.0-windows
+		net10.0-windows
 	VS_CONFIGURATION_TYPE
 		ClassLibrary
 )
@@ -405,7 +406,7 @@ if(REFRAMEWORK_REF_ASSEMBLIES_EXIST_DD2) # build-csharp-test-dd2
 		DOTNET_SDK
 			Microsoft.NET.Sdk
 		DOTNET_TARGET_FRAMEWORK
-			net8.0-windows
+			net10.0-windows
 		VS_CONFIGURATION_TYPE
 			ClassLibrary
 	)
@@ -446,7 +447,7 @@ if(REFRAMEWORK_REF_ASSEMBLIES_EXIST_RE2) # build-csharp-test-re2
 		DOTNET_SDK
 			Microsoft.NET.Sdk
 		DOTNET_TARGET_FRAMEWORK
-			net8.0-windows
+			net10.0-windows
 		VS_CONFIGURATION_TYPE
 			ClassLibrary
 	)
@@ -487,7 +488,7 @@ if(REFRAMEWORK_REF_ASSEMBLIES_EXIST_RE4) # build-csharp-test-re4
 		DOTNET_SDK
 			Microsoft.NET.Sdk
 		DOTNET_TARGET_FRAMEWORK
-			net8.0-windows
+			net10.0-windows
 		VS_CONFIGURATION_TYPE
 			ClassLibrary
 	)
@@ -528,7 +529,7 @@ if(REFRAMEWORK_REF_ASSEMBLIES_EXIST_MHWILDS) # build-csharp-test-mhwilds
 		DOTNET_SDK
 			Microsoft.NET.Sdk
 		DOTNET_TARGET_FRAMEWORK
-			net8.0-windows
+			net10.0-windows
 		VS_CONFIGURATION_TYPE
 			ClassLibrary
 	)
@@ -569,7 +570,7 @@ if(REFRAMEWORK_REF_ASSEMBLIES_EXIST_MHWILDS) # build-csharp-test-mhwilds
 		DOTNET_SDK
 			Microsoft.NET.Sdk
 		DOTNET_TARGET_FRAMEWORK
-			net8.0-windows
+			net10.0-windows
 		VS_CONFIGURATION_TYPE
 			ClassLibrary
 	)
@@ -610,7 +611,7 @@ if(REFRAMEWORK_REF_ASSEMBLIES_EXIST_DMC5) # build-csharp-test-dmc5
 		DOTNET_SDK
 			Microsoft.NET.Sdk
 		DOTNET_TARGET_FRAMEWORK
-			net8.0-windows
+			net10.0-windows
 		VS_CONFIGURATION_TYPE
 			ClassLibrary
 	)
@@ -651,7 +652,7 @@ if(REFRAMEWORK_REF_ASSEMBLIES_EXIST_RE2) # build-csharp-test-re2
 		DOTNET_SDK
 			Microsoft.NET.Sdk
 		DOTNET_TARGET_FRAMEWORK
-			net8.0-windows
+			net10.0-windows
 		VS_CONFIGURATION_TYPE
 			ClassLibrary
 	)
