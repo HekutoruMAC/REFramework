@@ -1311,6 +1311,19 @@ void IntegrityCheckBypass::immediate_patch_re9() {
     } else {
         spdlog::error("[IntegrityCheckBypass]: Could not find thread scheduler corruptor in RE9!");
     }
+
+    // This is also in RenderTaskEnd.
+    // It determines whether it should take the path to reach the thread_scheduler_corruptor, among many other things.
+    // The most noticeable thing is that it drops FPS to single digits, so we need to ignore it entirely.
+    auto conditional_mov_laggy_corruption_path = utility::scan(game, "53 48 8d ? ? ? ? ? 48 0F 45 cb 48");
+
+    if (conditional_mov_laggy_corruption_path) {
+        // NOP out the conditional mov. The normal path is already in RCX.
+        static auto cmpatch = Patch::create(*conditional_mov_laggy_corruption_path + 8, {0x90, 0x90, 0x90, 0x90}, true);
+        spdlog::info("[IntegrityCheckBypass]: Patched conditional mov laggy corruption path in RE9!");
+    } else {
+        spdlog::error("[IntegrityCheckBypass]: Could not find conditional mov laggy corruption path in RE9!");
+    }
 }
 
 void IntegrityCheckBypass::remove_stack_destroyer() {
