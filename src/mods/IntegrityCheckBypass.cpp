@@ -920,7 +920,7 @@ void IntegrityCheckBypass::restore_unencrypted_paks() {
 
     spdlog::info("[IntegrityCheckBypass]: Created sha3_rsa_code_midhook!");
 
-#if defined(MHWILDS) || defined(MHSTORIES3)
+#if TDB_VER >= 81
     const auto pak_load_check_start = utility::scan(game, "41 57 41 56 41 55 41 54 56 57 55 53 48 81 EC ? ? ? ? 48 89 CE 48 8B 05 ? ? ? ? 48 31 E0 48 89 84 24 ? ? ? ? 48 8B 81 ? ? ? ? 48 C1 E8 10");
     
     if (pak_load_check_start) {
