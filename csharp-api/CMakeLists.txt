@@ -131,6 +131,10 @@ check_dlls_exist("dd2" "${DD2_DLLS}" "REFRAMEWORK_REF_ASSEMBLIES_EXIST_DD2")
 set(MHWILDS_DLLS "REFramework.NET._System.Private.CoreLib.dll;REFramework.NET.application.dll;REFramework.NET.viacore.dll")
 check_dlls_exist("mhwilds" "${MHWILDS_DLLS}" "REFRAMEWORK_REF_ASSEMBLIES_EXIST_MHWILDS")
 
+# RE9
+set(RE9_DLLS "REFramework.NET._System.Private.CoreLib.dll;REFramework.NET.application.dll;REFramework.NET.viacore.dll")
+check_dlls_exist("re9" "${RE9_DLLS}" "REFRAMEWORK_REF_ASSEMBLIES_EXIST_RE9")
+
 # Define a list of NuGet packages and their versions
 # the last part, the package framework will only be used for copying the files
 set(REFRAMEWORK_NUGET_PACKAGES
@@ -577,6 +581,47 @@ if(REFRAMEWORK_REF_ASSEMBLIES_EXIST_MHWILDS) # build-csharp-test-mhwilds
 
 	set(CMKR_TARGET CSharpAPITestMHWildsWebAPI)
 	set_dotnet_references(CSharpAPITestMHWildsWebAPI "mhwilds" "${MHWILDS_DLLS}")
+
+endif()
+# Target: CSharpAPITestRE9
+if(REFRAMEWORK_REF_ASSEMBLIES_EXIST_RE9) # build-csharp-test-re9
+	set(CSharpAPITestRE9_SOURCES
+		"test/Test/TestRE9.cs"
+		cmake.toml
+	)
+
+	add_library(CSharpAPITestRE9 SHARED)
+
+	target_sources(CSharpAPITestRE9 PRIVATE ${CSharpAPITestRE9_SOURCES})
+	source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${CSharpAPITestRE9_SOURCES})
+
+	target_link_libraries(CSharpAPITestRE9 PUBLIC
+		csharp-api
+	)
+
+	set_target_properties(CSharpAPITestRE9 PROPERTIES
+		RUNTIME_OUTPUT_DIRECTORY_RELEASE
+			"${CMAKE_BINARY_DIR}/bin/"
+		RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO
+			"${CMAKE_BINARY_DIR}/bin"
+		RUNTIME_OUTPUT_DIRECTORY_DEBUG
+			"${CMAKE_BINARY_DIR}/bin"
+		LIBRARY_OUTPUT_DIRECTORY_RELEASE
+			"${CMAKE_BINARY_DIR}/lib"
+		LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO
+			"${CMAKE_BINARY_DIR}/lib"
+		LIBRARY_OUTPUT_DIRECTORY_DEBUG
+			"${CMAKE_BINARY_DIR}/lib"
+		DOTNET_SDK
+			Microsoft.NET.Sdk
+		DOTNET_TARGET_FRAMEWORK
+			net10.0-windows
+		VS_CONFIGURATION_TYPE
+			ClassLibrary
+	)
+
+	set(CMKR_TARGET CSharpAPITestRE9)
+	set_dotnet_references(CSharpAPITestRE9 "re9" "${RE9_DLLS}")
 
 endif()
 # Target: CSharpAPITestDMC5
