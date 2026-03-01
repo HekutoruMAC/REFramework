@@ -1440,33 +1440,85 @@ void IntegrityCheckBypass::immediate_patch_re9() {
     // What they are doing is finding UD2 gadgets (even in the middle of instructions) around the game and replace random thread scheduler jobs
     // with pointers to the found UD2 function/gadget.
     // This pattern will likely change in the next update, we don't know what the invariants are yet without another sample.
-    auto thread_scheduler_corruptor = utility::scan(game, "48 89 74 08 08 48 89 F0");
+    //auto thread_scheduler_corruptor = utility::scan(game, "48 89 74 08 08 48 89 F0");
 
-    if (thread_scheduler_corruptor) {
-        // Only patch out the mov [reg+reg*1+08], rsi.
-        static auto tspatch = Patch::create(*thread_scheduler_corruptor, { 0x90, 0x90, 0x90, 0x90, 0x90 }, true);
-        spdlog::info("[IntegrityCheckBypass]: Patched thread scheduler corruptor in RE9!");
+    // Invariant that works through obfuscation. They don't obfuscate the epilogue of the block above the slow path conditional.
+    const auto function_epilogue_sig = "48 31 e1 e8 ? ? ? ? C5 F8 28 B4 24 D0 01 00 00 48 81 c4 e8 01";
+    std::optional<uintptr_t> result{};
+    size_t nop_size{};
 
-        // This is also in RenderTaskEnd.
-        // It determines whether it should take the path to reach the thread_scheduler_corruptor, among many other things.
-        // The most noticeable thing is that it drops FPS to single digits, so we need to ignore it entirely.
-        auto conditional_mov_laggy_corruption_path = utility::scan(game, "53 48 8d ? ? ? ? ? 48 0F 45 cb 48");
+    for (auto ref = utility::scan(game, function_epilogue_sig);
+            ref.has_value();
+            ref = utility::scan(*ref + 1, (game_end - (*ref + 1)) - 0x1000, function_epilogue_sig))
+    {
+        // We need to determine which one is the right one. First one is not the right one, it's not obfuscated.
+        // Look for sequences of pops right after and skip.
+        size_t pop_count = 0;
+        utility::linear_decode((uint8_t*)*ref, 100, [&](utility::ExhaustionContext& ctx) -> bool {
+            if (ctx.instrux.Category == ND_CAT_POP) {
+                pop_count++;
+            }
 
-        if (conditional_mov_laggy_corruption_path) {
-            // NOP out the conditional mov. The normal path is already in RCX.
-            static auto cmpatch = Patch::create(*conditional_mov_laggy_corruption_path + 8, {0x90, 0x90, 0x90, 0x90}, true);
-            spdlog::info("[IntegrityCheckBypass]: Patched conditional mov laggy corruption path in RE9!");
-        } else {
-            spdlog::error("[IntegrityCheckBypass]: Could not find conditional mov laggy corruption path in RE9!");
+            // Stop at ret/int3/jmp
+            if (ctx.instrux.Category == ND_CAT_RET || ctx.instrux.Category == ND_CAT_INTERRUPT || (ctx.instrux.BranchInfo.IsBranch && ctx.instrux.Category != ND_CAT_CALL)) {
+                return false;
+            }
+            return true;
+        });
+
+        if (pop_count > 2) {
+            continue;
         }
+
+        spdlog::info("Checking candidate at 0x{:X}, pop_count: {}", *ref, pop_count);
+
+        // Now check if we have a cmov conditional nearby.
+        bool prev_was_ret = false;
+        utility::linear_decode((uint8_t*)*ref, 0x150, [&](utility::ExhaustionContext& ctx) -> bool {
+#if 0
+            char buf[256]{};
+            NdToText(&ctx.instrux, ctx.addr, sizeof(buf), buf);
+            spdlog::info("    0x{:X}: {}", ctx.addr, buf);
+#endif
+
+            if (ctx.instrux.Instruction == ND_INS_CMOVcc) {
+                result = ctx.addr;
+                nop_size = ctx.instrux.Length;
+                return false;
+            }
+
+            // Stop at ret/int3/jmp
+            if (ctx.instrux.Category == ND_CAT_RET) {
+                // advance ip by 1 to get to the other basic block.
+                // this is part of their obfuscation where they insert a random byte after a ret
+                // to break linear decoders, it really messes with IDA for example.
+                ctx.addr += 1;
+            }
+            return true;
+        });
+
+        if (result) {
+            break;
+        }
+    }
+
+    if (result) {
+        spdlog::info("[IntegrityCheckBypass]: Found conditional move instruction for thread scheduler corruptor in RE9 @ 0x{:X}, patching...", *result);
+        // Patch the cmov to to do nothing, the correct path is already in rcx.
+        std::vector<int16_t> nops{};
+        nops.resize(nop_size, 0x90);
+        static auto patch = Patch::create(*result, nops, true);
+        spdlog::info("[IntegrityCheckBypass]: Patched thread scheduler corruptor in RE9!");
     } else {
+        spdlog::error("[IntegrityCheckBypass]: Could not find conditional move instruction for thread scheduler corruptor in RE9!");
+
         spdlog::error("[IntegrityCheckBypass]: Could not find thread scheduler corruptor in RE9!");
         spdlog::warn("[IntegrityCheckBypass]: Attempting to hook JobQueue::SubmitDescriptor as a fallback for RE9. This may cause lag during integrity check jobs, but it should prevent crashes.");
 
         // Temporary workarounds for when none of that can be found
         // Temporarily needed on EGS and Japanese copies where obfuscation is different.
         // game will still lag but function with these.
-        auto ref = utility::scan(game, "41 b9 ff ff ff ff e8 ? ? ? ? 48 89 be");
+        auto ref = utility::scan(game, "41 B9 FF FF FF FF E8 ? ? ? ? 48 89 BE");
         auto fn = ref ? utility::calculate_absolute(*ref + 7) : std::optional<uintptr_t>{};
 
         if (fn) {
