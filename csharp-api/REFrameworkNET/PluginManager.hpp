@@ -105,6 +105,8 @@ internal:
     };
 
     static void StartPipeServer();
+    static void BeginCompileCyclePipe();
+    static void EndCompileCyclePipe();
     static void WireCompileErrorToPipe();
     static System::String^ GetPluginStatesAsJson();
 

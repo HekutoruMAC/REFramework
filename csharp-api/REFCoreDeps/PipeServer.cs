@@ -33,6 +33,10 @@ namespace REFrameworkNET
         const int MaxErrors = 200;
         const int MaxLogEntries = 500;
 
+        // --- Compile cycle tracking ---
+        static int s_compileCycleId = 0;
+        static readonly ManualResetEventSlim s_compileDone = new(true); // starts signaled (no compile in progress)
+
         // --- Game info (set once during init) ---
 
         public static string GameExe { get; set; }
@@ -73,6 +77,21 @@ namespace REFrameworkNET
 
         // --- Public API to push data ---
 
+        public static void BeginCompileCycle()
+        {
+            lock (s_lock)
+            {
+                s_compileCycleId++;
+                s_errors.Clear();
+            }
+            s_compileDone.Reset();
+        }
+
+        public static void EndCompileCycle()
+        {
+            s_compileDone.Set();
+        }
+
         public static void AddError(string message)
         {
             var entry = new ErrorEntry
@@ -106,6 +125,8 @@ namespace REFrameworkNET
 
         // --- Server loop ---
 
+        const int MaxPipeInstances = 4;
+
         static void ServerLoop()
         {
             var token = s_cts.Token;
@@ -118,7 +139,7 @@ namespace REFrameworkNET
                     pipe = new NamedPipeServerStream(
                         "REFrameworkNET",
                         PipeDirection.InOut,
-                        1,
+                        MaxPipeInstances,
                         PipeTransmissionMode.Byte,
                         PipeOptions.Asynchronous);
 
@@ -127,7 +148,15 @@ namespace REFrameworkNET
                     connectTask.Wait(token);
 
                     Console.WriteLine("[PipeServer] Client connected");
-                    HandleClient(pipe, token);
+
+                    // Handle client on a separate thread so we can accept more connections
+                    var clientPipe = pipe;
+                    pipe = null; // prevent finally from disposing
+                    var clientThread = new Thread(() => {
+                        try { HandleClient(clientPipe, token); }
+                        finally { try { clientPipe.Dispose(); } catch { } }
+                    }) { IsBackground = true, Name = "PipeServer.Client" };
+                    clientThread.Start();
                 }
                 catch (OperationCanceledException)
                 {
@@ -220,6 +249,8 @@ namespace REFrameworkNET
                     "get_plugins" => HandleGetPlugins(),
                     "clear_errors" => HandleClearErrors(),
                     "clear_log" => HandleClearLog(),
+                    "compile_status" => HandleCompileStatus(),
+                    "wait_compile" => HandleWaitCompile(root),
                     _ => throw new Exception($"Unknown method: {method}")
                 };
             }
@@ -255,7 +286,7 @@ namespace REFrameworkNET
                 var list = new List<object>(s_errors.Count);
                 foreach (var e in s_errors)
                     list.Add(new { message = e.Message, timestamp = e.Timestamp });
-                return new { errors = list, count = list.Count };
+                return new { errors = list, count = list.Count, compileCycleId = s_compileCycleId };
             }
         }
 
@@ -287,6 +318,58 @@ namespace REFrameworkNET
                 var count = s_logEntries.Count;
                 s_logEntries.Clear();
                 return new { cleared = count };
+            }
+        }
+
+        static object HandleCompileStatus()
+        {
+            lock (s_lock)
+            {
+                var files = new HashSet<string>();
+                foreach (var e in s_errors)
+                {
+                    // Error format: "filepath(line,col): CSxxxx: message"
+                    // Extract filename from the path before the first '('
+                    var msg = e.Message;
+                    var parenIdx = msg.IndexOf('(');
+                    if (parenIdx > 0)
+                    {
+                        var path = msg.Substring(0, parenIdx);
+                        try { files.Add(Path.GetFileName(path)); } catch { }
+                    }
+                }
+
+                return new
+                {
+                    compileCycleId = s_compileCycleId,
+                    status = s_errors.Count == 0 ? "ok" : "error",
+                    errorCount = s_errors.Count,
+                    compiling = !s_compileDone.IsSet,
+                    files = files
+                };
+            }
+        }
+
+        static object HandleWaitCompile(JsonElement root)
+        {
+            int timeoutMs = 15000; // default 15 seconds
+            if (root.TryGetProperty("timeout", out var timeoutProp))
+                timeoutMs = timeoutProp.GetInt32();
+
+            var startCycle = 0;
+            lock (s_lock) { startCycle = s_compileCycleId; }
+
+            bool completed = s_compileDone.Wait(timeoutMs);
+
+            lock (s_lock)
+            {
+                return new
+                {
+                    compileCycleId = s_compileCycleId,
+                    status = s_errors.Count == 0 ? "ok" : "error",
+                    errorCount = s_errors.Count,
+                    timedOut = !completed
+                };
             }
         }
 

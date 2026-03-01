@@ -653,6 +653,9 @@ namespace REFrameworkNET {
 
         auto self = System::Reflection::Assembly::LoadFrom(System::Reflection::Assembly::GetExecutingAssembly()->Location);
 
+        // Signal new compile cycle (auto-clears stale errors)
+        try { BeginCompileCyclePipe(); } catch (...) {}
+
         // Wire up compiler error logging to REFramework's log + pipe server
         REFrameworkNET::Compiler::OnCompileError = gcnew System::Action<System::String^>(&REFrameworkNET::API::LogError);
         try { WireCompileErrorToPipe(); } catch (...) {}
@@ -688,12 +691,16 @@ namespace REFrameworkNET {
             }
         }
 
+        // Signal compile cycle finished
+        try { EndCompileCyclePipe(); } catch (...) {}
+
         if (!ever_found) {
             Console::WriteLine("No C# plugins with an entry point found in " + cs_files_dir);
         }
 
         return true;
     } catch(System::Exception^ e) {
+        try { EndCompileCyclePipe(); } catch (...) {}
         REFrameworkNET::API::LogError(e->Message);
 
         // log stack
@@ -705,9 +712,11 @@ namespace REFrameworkNET {
 
         return false;
     } catch(const std::exception& e) {
+        try { EndCompileCyclePipe(); } catch (...) {}
         REFrameworkNET::API::LogError(gcnew System::String(e.what()));
         return false;
     } catch(...) {
+        try { EndCompileCyclePipe(); } catch (...) {}
         REFrameworkNET::API::LogError("Unknown exception caught while compiling C# files");
         return false;
     }
@@ -939,6 +948,14 @@ namespace REFrameworkNET {
         }
     }
 
+    void PluginManager::BeginCompileCyclePipe() {
+        REFrameworkNET::PipeServer::BeginCompileCycle();
+    }
+
+    void PluginManager::EndCompileCyclePipe() {
+        REFrameworkNET::PipeServer::EndCompileCycle();
+    }
+
     void PluginManager::WireCompileErrorToPipe() {
         REFrameworkNET::Compiler::OnCompileError += gcnew System::Action<System::String^>(&REFrameworkNET::PipeServer::AddError);
     }
@@ -954,21 +971,28 @@ namespace REFrameworkNET {
     }
 
     System::String^ PluginManager::GetPluginStatesAsJson() {
-        auto sb = gcnew System::Text::StringBuilder();
-        sb->Append("[");
-        bool first = true;
-        for each (PluginState^ state in s_plugin_states) {
-            if (!first) sb->Append(",");
-            first = false;
-            sb->Append("{\"path\":\"");
-            sb->Append((state->script_path != nullptr ? state->script_path->Replace("\\", "\\\\") : ""));
-            sb->Append("\",\"isDynamic\":");
-            sb->Append(state->is_dynamic ? "true" : "false");
-            sb->Append(",\"isAlive\":");
-            sb->Append(state->IsAlive() ? "true" : "false");
-            sb->Append("}");
+        try {
+            // Snapshot to avoid iteration issues if s_plugin_states is modified during hot-reload
+            auto snapshot = s_plugin_states->ToArray();
+
+            auto sb = gcnew System::Text::StringBuilder();
+            sb->Append("[");
+            bool first = true;
+            for each (PluginState^ state in snapshot) {
+                if (!first) sb->Append(",");
+                first = false;
+                sb->Append("{\"path\":\"");
+                sb->Append((state->script_path != nullptr ? state->script_path->Replace("\\", "\\\\") : ""));
+                sb->Append("\",\"isDynamic\":");
+                sb->Append(state->is_dynamic ? "true" : "false");
+                sb->Append(",\"isAlive\":");
+                sb->Append(state->IsAlive() ? "true" : "false");
+                sb->Append("}");
+            }
+            sb->Append("]");
+            return sb->ToString();
+        } catch (...) {
+            return "[]"; // concurrent modification during hot-reload, return empty
         }
-        sb->Append("]");
-        return sb->ToString();
     }
 }
