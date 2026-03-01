@@ -205,7 +205,7 @@ namespace REFrameworkNET
             var options = CSharpParseOptions.Default
                 .WithLanguageVersion(LanguageVersion.CSharp12)
                 .WithPreprocessorSymbols(symbols);
-            var parsedSyntaxTree = SyntaxFactory.ParseSyntaxTree(codeString, options);
+            var parsedSyntaxTree = SyntaxFactory.ParseSyntaxTree(codeString, options, path: filePath);
 
             var references = GenerateExhaustiveMetadataReferences(executingAssembly, deps);
 
