@@ -1278,6 +1278,144 @@ void IntegrityCheckBypass::immediate_patch_dd2() {
     }
 }
 
+// Temporary workarounds
+static SafetyHookInline g_submit_hook{};
+
+static void log_submit_descriptor_once(int64_t descriptor, uintptr_t first_entry, uintptr_t func_ptr) {
+    static std::unordered_set<int64_t> seen_descriptors{};
+    static std::mutex seen_descriptors_mutex{};
+
+    try {
+        std::lock_guard<std::mutex> lock{seen_descriptors_mutex};
+        if (seen_descriptors.emplace(descriptor).second) {
+            SPDLOG_INFO("[IntegrityCheckBypass]: First time seeing descriptor 0x{:X}, Entry: 0x{:X}, Func Ptr: 0x{:X}", descriptor, first_entry, func_ptr);
+        }
+    } catch (...) {
+    }
+}
+
+static std::unordered_map<int64_t, uintptr_t>& get_submit_descriptor_original_func_ptrs() {
+    static std::unordered_map<int64_t, uintptr_t> original_func_ptrs{};
+    return original_func_ptrs;
+}
+
+static std::mutex& get_submit_descriptor_original_func_ptrs_mutex() {
+    static std::mutex original_func_ptrs_mutex{};
+    return original_func_ptrs_mutex;
+}
+
+static void remember_submit_descriptor_original_func_ptr(int64_t descriptor, uintptr_t func_ptr) {
+    if (descriptor == 0 || func_ptr == 0) {
+        return;
+    }
+
+    try {
+        std::lock_guard<std::mutex> lock{get_submit_descriptor_original_func_ptrs_mutex()};
+        auto& original_func_ptrs = get_submit_descriptor_original_func_ptrs();
+        /*auto it = original_func_ptrs.find(descriptor);
+        if (it == original_func_ptrs.end()) {
+            original_func_ptrs.emplace(descriptor, func_ptr);
+        }*/
+
+        original_func_ptrs[descriptor] = func_ptr; // always update to the most recent func ptr.
+    } catch (...) {
+    }
+}
+
+static uintptr_t get_submit_descriptor_original_func_ptr(int64_t descriptor) {
+    if (descriptor == 0) {
+        return 0;
+    }
+
+    try {
+        std::lock_guard<std::mutex> lock{get_submit_descriptor_original_func_ptrs_mutex()};
+        auto& original_func_ptrs = get_submit_descriptor_original_func_ptrs();
+        auto it = original_func_ptrs.find(descriptor);
+        if (it != original_func_ptrs.end()) {
+            return it->second;
+        }
+    } catch (...) {
+    }
+
+    return 0;
+}
+
+uintptr_t __fastcall hk_JobQueue_SubmitDescriptor(uintptr_t scheduler, int64_t descriptor, int priority, uint32_t max_workers) {
+    auto first_entry = *reinterpret_cast<uintptr_t*>(descriptor + 24);
+    uintptr_t func_ptr = 0;
+
+    if (first_entry) {
+        func_ptr = *reinterpret_cast<uintptr_t*>(first_entry + 8);
+
+        if (IsBadReadPtr((void*)func_ptr, 8)) {
+            // whatever.
+            return g_submit_hook.call<uintptr_t>(scheduler, descriptor, priority, max_workers);
+        }
+    }
+
+    log_submit_descriptor_once(descriptor, first_entry, func_ptr);
+
+    if (first_entry) {
+        __try {
+            if (func_ptr && *reinterpret_cast<uint16_t*>(func_ptr) == 0x0B0F) {
+                const auto original_func_ptr = get_submit_descriptor_original_func_ptr(first_entry);
+
+                if (original_func_ptr != 0 && original_func_ptr != func_ptr) {
+                    *reinterpret_cast<uintptr_t*>(first_entry + 8) = original_func_ptr;
+                    SPDLOG_INFO("[IntegrityCheckBypass]: Restored descriptor 0x{:X} func pointer to 0x{:X} (was 0x{:X})", descriptor, original_func_ptr, func_ptr);
+                }
+
+                auto func_ptr_addr = first_entry + 8;
+                SPDLOG_INFO("[IntegrityCheckBypass]: HWBP TARGET: 0x{:X} (entry+8 at 0x{:X})", func_ptr_addr, first_entry);
+
+                const auto retaddr = (uintptr_t)_ReturnAddress();
+                SPDLOG_INFO("[IntegrityCheckBypass]: Caught integrity check job submission! Descriptor: 0x{:X}, Func Ptr: 0x{:X}, Return Address: 0x{:X}", descriptor, func_ptr, retaddr);
+            }
+
+            if (func_ptr) {
+                remember_submit_descriptor_original_func_ptr(first_entry, func_ptr);
+            }
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            SPDLOG_WARN("[IntegrityCheckBypass]: Exception caught while checking integrity job submission. Descriptor: 0x{:X}", descriptor);
+            return g_submit_hook.call<uintptr_t>(scheduler, descriptor, priority, max_workers);
+            //return 0; // garbage pointer - eat it
+        }
+    }
+    return g_submit_hook.call<uintptr_t>(scheduler, descriptor, priority, max_workers);
+}
+
+// Harmless replacement - just returns
+static void __fastcall noop_job(int64_t, int64_t) {}
+
+void validate_job_func(SafetyHookContext& ctx) {
+    auto func_ptr = ctx.rax;
+    if (!func_ptr) {
+        return;
+    }
+
+    __try {
+        // UD2
+        if (*reinterpret_cast<uint16_t*>(func_ptr) == 0x0B0F) {
+            // if we already have a cached original, restore it to prevent crashes.
+            const auto original_func_ptr = get_submit_descriptor_original_func_ptr(ctx.rdx);
+            if (original_func_ptr != 0 && original_func_ptr != func_ptr) {
+                ctx.rax = original_func_ptr;
+                *(uintptr_t*)(ctx.rdx + 8) = original_func_ptr; // restore the func ptr in the descriptor as well.
+                SPDLOG_INFO("[IntegrityCheckBypass]: Restored descriptor 0x{:X} func pointer to 0x{:X} in job func validation (was 0x{:X})", ctx.rdx, original_func_ptr, func_ptr);
+            } else {
+                ctx.rax = reinterpret_cast<uintptr_t>(&noop_job);
+                //SPDLOG_INFO("[IntegrityCheckBypass]: Caught integrity check job submission at call site, skipping! FuncPtr: 0x{:X}", func_ptr);
+            }
+        } else {
+            // also cache the original here for later.
+            remember_submit_descriptor_original_func_ptr(ctx.rdx, func_ptr);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        ctx.rax = reinterpret_cast<uintptr_t>(&noop_job);
+        //SPDLOG_WARN("[IntegrityCheckBypass]: Exception caught while validating job function pointer. FuncPtr: 0x{:X}", func_ptr);
+    }
+}
+
 void IntegrityCheckBypass::immediate_patch_re9() {
     spdlog::info("[IntegrityCheckBypass]: Scanning RE9...");
 
@@ -1308,21 +1446,47 @@ void IntegrityCheckBypass::immediate_patch_re9() {
         // Only patch out the mov [reg+reg*1+08], rsi.
         static auto tspatch = Patch::create(*thread_scheduler_corruptor, { 0x90, 0x90, 0x90, 0x90, 0x90 }, true);
         spdlog::info("[IntegrityCheckBypass]: Patched thread scheduler corruptor in RE9!");
+
+        // This is also in RenderTaskEnd.
+        // It determines whether it should take the path to reach the thread_scheduler_corruptor, among many other things.
+        // The most noticeable thing is that it drops FPS to single digits, so we need to ignore it entirely.
+        auto conditional_mov_laggy_corruption_path = utility::scan(game, "53 48 8d ? ? ? ? ? 48 0F 45 cb 48");
+
+        if (conditional_mov_laggy_corruption_path) {
+            // NOP out the conditional mov. The normal path is already in RCX.
+            static auto cmpatch = Patch::create(*conditional_mov_laggy_corruption_path + 8, {0x90, 0x90, 0x90, 0x90}, true);
+            spdlog::info("[IntegrityCheckBypass]: Patched conditional mov laggy corruption path in RE9!");
+        } else {
+            spdlog::error("[IntegrityCheckBypass]: Could not find conditional mov laggy corruption path in RE9!");
+        }
     } else {
         spdlog::error("[IntegrityCheckBypass]: Could not find thread scheduler corruptor in RE9!");
-    }
+        spdlog::warn("[IntegrityCheckBypass]: Attempting to hook JobQueue::SubmitDescriptor as a fallback for RE9. This may cause lag during integrity check jobs, but it should prevent crashes.");
 
-    // This is also in RenderTaskEnd.
-    // It determines whether it should take the path to reach the thread_scheduler_corruptor, among many other things.
-    // The most noticeable thing is that it drops FPS to single digits, so we need to ignore it entirely.
-    auto conditional_mov_laggy_corruption_path = utility::scan(game, "53 48 8d ? ? ? ? ? 48 0F 45 cb 48");
+        // Temporary workarounds for when none of that can be found
+        // Temporarily needed on EGS and Japanese copies where obfuscation is different.
+        // game will still lag but function with these.
+        auto ref = utility::scan(game, "41 b9 ff ff ff ff e8 ? ? ? ? 48 89 be");
+        auto fn = ref ? utility::calculate_absolute(*ref + 7) : std::optional<uintptr_t>{};
 
-    if (conditional_mov_laggy_corruption_path) {
-        // NOP out the conditional mov. The normal path is already in RCX.
-        static auto cmpatch = Patch::create(*conditional_mov_laggy_corruption_path + 8, {0x90, 0x90, 0x90, 0x90}, true);
-        spdlog::info("[IntegrityCheckBypass]: Patched conditional mov laggy corruption path in RE9!");
-    } else {
-        spdlog::error("[IntegrityCheckBypass]: Could not find conditional mov laggy corruption path in RE9!");
+        if (fn) {
+            g_submit_hook = safetyhook::create_inline(
+                *fn,
+                hk_JobQueue_SubmitDescriptor
+            );
+
+            spdlog::info("[IntegrityCheckBypass]: Hooked JobQueue::SubmitDescriptor in RE9 @ 0x{:X}!", *fn);
+        }
+
+        static std::vector<SafetyHookMid> callsites{};
+
+        for (auto ref = utility::scan(utility::get_executable(), "48 8b 42 08 48 8b 4a 10 48 8b 52 18 48 85 c9 0f 84 ? ? ? ? ff d0"); 
+            ref; 
+            ref = utility::scan((*ref + 1), game_end - (*ref + 1), "48 8b 42 08 48 8b 4a 10 48 8b 52 18 48 85 c9 0f 84 ? ? ? ? ff d0")) 
+        {
+            callsites.emplace_back(safetyhook::create_mid((void*)(*ref + 4), validate_job_func));
+            spdlog::info("[IntegrityCheckBypass]: Hooked call site at 0x{:X}", *ref);
+        }
     }
 }
 
