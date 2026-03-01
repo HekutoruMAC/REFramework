@@ -2,6 +2,9 @@
 #include <iomanip>
 #include <regex>
 
+#include <asmjit/asmjit.h>
+#include <asmjit/x86/x86assembler.h>
+
 #include "utility/Module.hpp"
 #include "utility/Scan.hpp"
 
@@ -1538,6 +1541,109 @@ void IntegrityCheckBypass::immediate_patch_re9() {
         {
             callsites.emplace_back(safetyhook::create_mid((void*)(*ref + 4), validate_job_func));
             spdlog::info("[IntegrityCheckBypass]: Hooked call site at 0x{:X}", *ref);
+        }
+    }
+
+    // Scan for PE header integrity check (thanks to SunBeam for pointing out this exists in RE9 and showing me where it is!)
+    auto before_sig = "4C 89 ? 24 40 00 00 00 41 ?";
+
+    for (auto ref = utility::scan(game, before_sig);
+         ref.has_value();
+         ref = utility::scan(*ref + 1, (game_end - (*ref + 1)) - 0x1000, before_sig))
+    {
+        spdlog::info("[IntegrityCheckBypass]: Checking candidate for PE header integrity check at 0x{:X}...", *ref);
+
+        bool found_0x20 = false;
+        bool found_0x28 = false;
+        bool found = false;
+
+        utility::linear_decode((uint8_t*)*ref, 0x200, [&](utility::ExhaustionContext& ctx) -> bool {
+            const auto& ix = ctx.instrux;
+
+            auto has_mem_operand_with_disp = [&](uint64_t disp) -> bool {
+                for (uint8_t i = 0; i < ix.OperandsCount; i++) {
+                    if (ix.Operands[i].Type == ND_OP_MEM &&
+                        ix.Operands[i].Info.Memory.HasBase &&
+                        ix.Operands[i].Info.Memory.HasDisp &&
+                        ix.Operands[i].Info.Memory.Disp == disp)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            };
+
+            if (!found_0x20 && has_mem_operand_with_disp(0x20)) {
+                found_0x20 = true;
+                return true;
+            }
+
+            if (found_0x20 && !found_0x28 && has_mem_operand_with_disp(0x28)) {
+                found_0x28 = true;
+                return true;
+            }
+
+            if (found_0x20 && found_0x28 && !found) {
+                for (uint8_t i = 0; i < ix.OperandsCount; i++) {
+                    if (ix.Operands[i].Type == ND_OP_MEM &&
+                        ix.Operands[i].Info.Memory.HasBase &&
+                        ix.Operands[i].Info.Memory.Base == NDR_RSP &&
+                        ix.Operands[i].Info.Memory.HasDisp &&
+                        ix.Operands[i].Info.Memory.Disp == 0x90)
+                    {
+                        found = true;
+                        return false;
+                    }
+                }
+            }
+
+            // Stop at ret/int3/unconditional jmp (but not call)
+            if (ix.Category == ND_CAT_RET || ix.Category == ND_CAT_INTERRUPT ||
+                (ix.BranchInfo.IsBranch && !ix.BranchInfo.IsConditional && ix.Category != ND_CAT_CALL))
+            {
+                return false;
+            }
+
+            return true;
+        });
+
+        if (found) {
+            spdlog::info("[IntegrityCheckBypass]: Found PE header integrity check at 0x{:X}!", *ref);
+
+            static auto allocated_memory = VirtualAlloc(nullptr, 0x1000, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+            memcpy(allocated_memory, (void*)GetModuleHandleA(nullptr), 0x1000);
+
+            constexpr size_t pattern_byte_size = 10; // "4C 89 ? 24 40 00 00 00 41 ?"
+            const auto patch_addr = *ref + pattern_byte_size;
+
+            // Decode the instruction at patch_addr to get the destination register
+            const auto first_ix = utility::decode_one((uint8_t*)patch_addr);
+            const auto reg = first_ix->Operands[0].Info.Register.Reg;
+            const auto first_ix_len = first_ix->Length;
+
+            // Decode the next instruction to know how many bytes to NOP
+            const auto second_ix = utility::decode_one((uint8_t*)(patch_addr + first_ix_len));
+            const auto second_ix_len = second_ix->Length;
+
+            // Build movabs reg, allocated_memory using asmjit
+            using namespace asmjit;
+            using namespace asmjit::x86;
+
+            CodeHolder code{};
+            code.init(Environment::host());
+            Assembler a{&code};
+
+            a.movabs(gpq(reg), (uintptr_t)allocated_memory);
+
+            const auto& buf = code.textSection()->buffer();
+            const auto total_size = first_ix_len + second_ix_len;
+            std::vector<uint8_t> raw(total_size, 0x90);
+            memcpy(raw.data(), buf.data(), buf.size());
+
+            std::vector<int16_t> patch_bytes(raw.begin(), raw.end());
+            static auto pe_header_patch = Patch::create(patch_addr, patch_bytes, true);
+            spdlog::info("[IntegrityCheckBypass]: Patched PE header integrity check with movabs to 0x{:X} (reg: {})", (uintptr_t)allocated_memory, reg);
+            break;
         }
     }
 }
