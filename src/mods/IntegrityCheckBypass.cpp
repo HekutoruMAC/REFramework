@@ -916,21 +916,76 @@ void IntegrityCheckBypass::restore_unencrypted_paks() {
 
     // If this breaks... we'll fix it!
     const auto game = utility::get_executable();
-
-    std::vector<std::string> possible_patterns = {
-        "C5 F8 57 C0 C5 FC 11 84 24 ? ? ? ? C5 FC 11 84 24 ? ? ? ? C5 FC 11 84 24 ? ? ? ? C5 FC 11 84 24 ? ? ? ? C5 FC 11 44 24 ? 48", 
-        "C5 F8 57 C0 C5 FC 11 84 24 ? ? ? ? C5 FC 11 84 24 ? ? ? ? C5 FC 11 84 24 ? ? ? ? C5 FC 11 84 24 ? ? ? ? C5 FC 11 84 24 ? ? ? ? 48 C1 ? 10",  // MHWILDS v1.041
-        "C5 F8 57 C0 C5 FC 11 84 24 ? ? ? ? C5 FC 11 84 24 ? ? ? ? C5 FC 11 84 24 ? ? ? ? C5 FC 11 84 24 ? ? ? ? C5 FC 11 84 24 ? ? ? ? 48 8B ? ? 00 00 00 48 C1 ? 10",  // MHSTORIES3
-        "48 8B 05 ? ? ? ? 49 33 ? C0 00 00 00 C5 F1 EF C9 C5 F9 EF C0 C5 FC 11 45 ? C5 FC 11 4D ? C5 FC 11 4D ? C5 FC 11 4D ? C5 FC 11 4D ? 48 A9 00 00 F8 FF",  // PRAGMATA
-        "C5 F8 57 C0 C5 FC 11 45 ? C5 FC 11 45 ? C5 FC 11 45 ? C5 FC 11 45 ? C5 FC 11 45 ? 48 C1 E9 10" // RE9 v1.0.0.0
-    };
+    const auto pak_load_fn = utility::find_function_from_string_ref(game, L"_chunk_", true);
     
-    std::optional<uintptr_t> sha3_code_start;
+    std::optional<uintptr_t> sha3_code_start{};
 
-    for (const auto& pattern : possible_patterns) {
-        sha3_code_start = utility::scan(game, pattern);
-        if (sha3_code_start) {
-            break;
+    // The usual path we'll use. Easily identifies the func via string ref.
+    // looks for a basic block containing a bunch of vmovups instructions
+    // set the sha3_code_start to that block.
+    if (pak_load_fn) {
+        spdlog::info("[IntegrityCheckBypass]: Found pak_load_fn @ 0x{:X}, using it as reference to find sha3_code_start!", *pak_load_fn);
+        const auto bounds = utility::determine_function_bounds(*pak_load_fn);
+
+        if (bounds) {
+            const auto blocks = utility::collect_linear_blocks(bounds->start, bounds->end);
+            const utility::LinearBlock* found_block = nullptr;
+
+            for (const auto& block : blocks) {
+                // Look for sequences of vmovups instructions using disasm.
+                size_t vmovups_sequence_length = 0;
+                utility::linear_decode((uint8_t*)block.start, 100, [&](utility::ExhaustionContext& ctx) -> bool {
+                    if (ctx.addr > block.end) {
+                        return false;
+                    }
+
+                    if (std::string_view{ctx.instrux.Mnemonic}.starts_with("VMOVUPS")) {
+                        vmovups_sequence_length++;
+                    } else {
+                        if (vmovups_sequence_length >= 4) { // The decryption code has a long sequence of vmovups instructions, so we look for sequences of 4 or more.
+                            spdlog::info("[IntegrityCheckBypass]: Found vmovups sequence of length {} at 0x{:X}, likely sha3_code_start!", vmovups_sequence_length, ctx.addr);
+                            found_block = &block;
+                            return false;
+                        }
+
+                        vmovups_sequence_length = 0;
+                    }
+
+                    return true;
+                });
+
+                if (found_block != nullptr) {
+                    break;
+                }
+            }
+
+            if (found_block) {
+                // The start of the vmovups isn't always the correct spot. The start of the block is actually the correct spot.
+                sha3_code_start = found_block->start;
+                spdlog::info("[IntegrityCheckBypass]: Found sha3_code_start @ 0x{:X} using vmovups sequence!", *sha3_code_start);
+            } else {
+                spdlog::error("[IntegrityCheckBypass]: Could not find vmovups sequence in blocks of pak_load_fn, cannot find sha3_code_start!");
+            }
+        } else {
+            spdlog::error("[IntegrityCheckBypass]: Could not determine function bounds for pak_load_fn, cannot find sha3_code_start!");
+        }
+    } 
+    
+    // Fall back to old stuff.
+    if (!sha3_code_start) {
+        std::vector<std::string> possible_patterns = {
+            "C5 F8 57 C0 C5 FC 11 84 24 ? ? ? ? C5 FC 11 84 24 ? ? ? ? C5 FC 11 84 24 ? ? ? ? C5 FC 11 84 24 ? ? ? ? C5 FC 11 44 24 ? 48", 
+            "C5 F8 57 C0 C5 FC 11 84 24 ? ? ? ? C5 FC 11 84 24 ? ? ? ? C5 FC 11 84 24 ? ? ? ? C5 FC 11 84 24 ? ? ? ? C5 FC 11 84 24 ? ? ? ? 48 C1 ? 10",  // MHWILDS v1.041
+            "C5 F8 57 C0 C5 FC 11 84 24 ? ? ? ? C5 FC 11 84 24 ? ? ? ? C5 FC 11 84 24 ? ? ? ? C5 FC 11 84 24 ? ? ? ? C5 FC 11 84 24 ? ? ? ? 48 8B ? ? 00 00 00 48 C1 ? 10",  // MHSTORIES3
+            "48 8B 05 ? ? ? ? 49 33 ? C0 00 00 00 C5 F1 EF C9 C5 F9 EF C0 C5 FC 11 45 ? C5 FC 11 4D ? C5 FC 11 4D ? C5 FC 11 4D ? C5 FC 11 4D ? 48 A9 00 00 F8 FF",  // PRAGMATA
+            "C5 F8 57 C0 C5 FC 11 45 ? C5 FC 11 45 ? C5 FC 11 45 ? C5 FC 11 45 ? C5 FC 11 45 ? 48 C1 E9 10" // RE9 v1.0.0.0
+        };
+
+        for (const auto& pattern : possible_patterns) {
+            sha3_code_start = utility::scan(game, pattern);
+            if (sha3_code_start) {
+                break;
+            }
         }
     }
 
