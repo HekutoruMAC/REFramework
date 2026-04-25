@@ -5,6 +5,7 @@
 #include <utility/String.hpp>
 #include <utility/Memory.hpp>
 
+#include <sdk/GameIdentity.hpp>
 #include "sdk/GUIPrimitiveSystem.hpp"
 #include "sdk/Application.hpp"
 
@@ -214,7 +215,10 @@ std::optional<std::string> Hooks::hook_update_transform() {
 }
 
 std::optional<std::string> Hooks::hook_update_camera_controller() {
-#if defined(RE2) || defined(RE3)
+    if (!(sdk::GameIdentity::get().is_re2() || sdk::GameIdentity::get().is_re3())) {
+        return std::nullopt;
+    }
+
     // Version 1.0 jmp stub: game+0xB4685A0
     // Version 1
     /*auto updatecamera_controllerCall = utility::scan(game, "75 ? 48 89 FA 48 89 D9 E8 ? ? ? ? 48 8B 43 50 48 83 78 18 00 75 ? 45 89");
@@ -243,13 +247,15 @@ std::optional<std::string> Hooks::hook_update_camera_controller() {
     if (!m_update_camera_controller_hook->create()) {
         return "Failed to hook UpdateCameraController";
     }
-#endif
 
     return std::nullopt;
 }
 
 std::optional<std::string> Hooks::hook_update_camera_controller2() {
-#if defined(RE2) || defined(RE3)
+    if (!(sdk::GameIdentity::get().is_re2() || sdk::GameIdentity::get().is_re3())) {
+        return std::nullopt;
+    }
+
     // Version 1.0 jmp stub: game+0xCF2510
     // Version 1.0 function: game+0xB436230
     
@@ -270,7 +276,6 @@ std::optional<std::string> Hooks::hook_update_camera_controller2() {
     if (!m_update_camera_controller2_hook->create()) {
         return "Failed to hook Updatecamera_controller2";
     }
-#endif
 
     return std::nullopt;
 }
@@ -462,7 +467,7 @@ std::optional<std::string> Hooks::hook_all_application_entries() {
     for (auto i = 0; i < 1024; ++i) {
         auto entry = application->get_function(i);
 
-        if (entry == nullptr || entry->description == nullptr) {
+        if (entry == nullptr || entry->get_description() == nullptr) {
             continue;
         }
 
@@ -477,19 +482,19 @@ std::optional<std::string> Hooks::hook_all_application_entries() {
             continue;
         }*/
 
-        spdlog::info("{} {} entry: {:x}", i, entry->description, (uintptr_t)entry);
+        spdlog::info("{} {} entry: {:x}", i, entry->get_description(), (uintptr_t)entry);
 
-        auto generated_hook = generate_hook_func((const char*)entry->description, (uintptr_t)&global_application_entry_hook);
+        auto generated_hook = generate_hook_func((const char*)entry->get_description(), (uintptr_t)&global_application_entry_hook);
 
         //m_application_entry_hooks[entry->description] = std::make_unique<FunctionHook>(func, generated_hook);
         
         // We are just going to replace the pointer to the function for now
         // Doing a full hook with FunctionHook eats up a lot of initialization time because of
         // the constant thread suspension. 
-        m_application_entry_hooks[entry->description] = func;
+        m_application_entry_hooks[entry->get_description()] = func;
         entry->func = (void (*)(void*))generated_hook;
 
-        spdlog::info("Hooked {} {:x}->{:x}", entry->description, (uintptr_t)func, (uintptr_t)generated_hook);
+        spdlog::info("Hooked {} {:x}->{:x}", entry->get_description(), (uintptr_t)func, (uintptr_t)generated_hook);
     }
 
     /*for (auto& entry : m_application_entry_hooks) {
@@ -503,7 +508,15 @@ std::optional<std::string> Hooks::hook_all_application_entries() {
 
 std::optional<std::string> Hooks::hook_update_before_lock_scene() {
     // This function is removed (or not reflected) >= TDB74...
-#if TDB_VER < 74
+    // Additionally, it never existed in RE7 or MHRISE — attempting to hook
+    // there returns an error string and aborts the whole Hooks init chain.
+    {
+        const auto& gi = sdk::GameIdentity::get();
+        if (gi.is_re7() || gi.is_mhrise()) {
+            return std::nullopt;
+        }
+    }
+    if (sdk::GameIdentity::get().tdb_ver() < 74) {
     // Hook updateBeforeLockScene
     auto update_before_lock_scene = sdk::find_native_method("via.render.EntityRenderer", "updateBeforeLockScene");
 
@@ -518,7 +531,7 @@ std::optional<std::string> Hooks::hook_update_before_lock_scene() {
     if (!m_update_before_lock_scene_hook->create()) {
         return "Failed to hook via::render::EntityRenderer::updateBeforeLockScene";
     }
-#endif
+    }
 
     return std::nullopt;
 }
@@ -545,11 +558,7 @@ std::optional<std::string> Hooks::hook_lightshaft_draw() {
         return "Unable to get via::render::LightShaft vtable";
     }
 
-#if defined(RE8) || defined(MHRISE)
-    auto draw = lightshaft_vtable[13];
-#else
-    auto draw = lightshaft_vtable[10];
-#endif
+    auto draw = lightshaft_vtable[(sdk::GameIdentity::get().is_re8() || sdk::GameIdentity::get().is_mhrise()) ? 13 : 10];
 
     if (draw == nullptr) {
         return "Unable to get via::render::LightShaft::draw";
@@ -587,7 +596,6 @@ std::optional<std::string> Hooks::hook_view_get_size() {
     }
 
     
-#if TDB_VER >= 74
     if (!ref) {
         ref = utility::find_pattern_in_path((uint8_t*)get_size_func, 1000, false, "48 89 F2 E8"); // >= TDB74 (MHWILDS)
     }
@@ -595,7 +603,6 @@ std::optional<std::string> Hooks::hook_view_get_size() {
     if (!ref) {
         ref = utility::find_pattern_in_path((uint8_t*)get_size_func, 1000, false, "48 8B CF E8"); // Pragmata
     }
-#endif
 
     if (!ref) {
         return "Hook init failed: via.SceneView.get_Size native function not found. Pattern scan failed.";
@@ -631,11 +638,9 @@ std::optional<std::string> Hooks::hook_camera_get_projection_matrix() {
         ref = utility::find_pattern_in_path((uint8_t*)func, 1000, false, "48 8B CB E8");
     }
     
-#if TDB_VER >= 74
     if (!ref) {
         ref = utility::find_pattern_in_path((uint8_t*)func, 1000, false, "48 89 F2 E8"); // >= TDB74?
     }
-#endif
 
     if (!ref) {
         return "Hook init failed: via.Camera.get_ProjectionMatrix native function not found. Pattern scan failed.";
@@ -671,11 +676,9 @@ std::optional<std::string> Hooks::hook_camera_get_view_matrix() {
         ref = utility::find_pattern_in_path((uint8_t*)func, 1000, false, "48 8B CB E8");
     }
 
-#if TDB_VER >= 74
     if (!ref) {
         ref = utility::find_pattern_in_path((uint8_t*)func, 1000, false, "48 89 F2 E8"); // >= TDB74?
     }
-#endif
 
     if (!ref) {
         return "Hook init failed: via.Camera.get_ViewMatrix native function not found. Pattern scan failed.";
@@ -714,7 +717,7 @@ std::optional<std::string> Hooks::hook_render_layer(Hooks::RenderLayerHook<sdk::
 
     spdlog::info("{:s} vtable: {:x}", hook.name, (uintptr_t)obj_vtable - g_framework->get_module());
 
-    auto draw_native = obj_vtable[sdk::renderer::RenderLayer::DRAW_VTABLE_INDEX];
+    auto draw_native = obj_vtable[sdk::renderer::RenderLayer::get_draw_vtable_index()];
 
     if (draw_native == 0) {
         return std::string{"Hooks init failed: "} + hook.name + " draw native not found.";
@@ -733,7 +736,7 @@ std::optional<std::string> Hooks::hook_render_layer(Hooks::RenderLayerHook<sdk::
         spdlog::info("Skipping draw hook for {:s}, stub code detected", hook.name);
     }
 
-    auto update_native = obj_vtable[sdk::renderer::RenderLayer::UPDATE_VTABLE_INDEX];
+    auto update_native = obj_vtable[sdk::renderer::RenderLayer::get_update_vtable_index()];
 
     if (update_native == 0) {
         return std::string{"Hooks init failed: "} + hook.name + " update native not found.";
@@ -928,7 +931,7 @@ void Hooks::global_application_entry_hook_internal(void* entry, const char* name
     }
 
     if (hash == "BeginRendering"_fnv) {
-#if TDB_VER >= 73
+    if (sdk::GameIdentity::get().tdb_ver() >= 73) {
     if (auto primitive_system = sdk::gui::renderer::PrimitiveSystem::get(); primitive_system != nullptr) {
         auto primitive_buffer = primitive_system->get_primitive_buffer();
         
@@ -939,7 +942,7 @@ void Hooks::global_application_entry_hook_internal(void* entry, const char* name
             }
         }
     }
-#endif
+    }
     }
 
     if (m_profiling_enabled) {

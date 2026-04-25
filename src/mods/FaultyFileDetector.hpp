@@ -15,7 +15,11 @@
 
 #include <sdk/TDBVer.hpp>
 
-#if TDB_VER >= 81
+#ifdef REFRAMEWORK_UNIVERSAL
+// Universal build compiles the detector unconditionally; runtime check in
+// early_init/on_frame gates whether hooks actually install.
+#define FAULTY_FILE_DETECTOR_ENABLED 1
+#elif TDB_VER >= 81
 #define FAULTY_FILE_DETECTOR_ENABLED 1
 #endif
 

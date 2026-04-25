@@ -15,10 +15,14 @@
 
 #include <safetyhook.hpp>
 
-#if TDB_VER >= 81
-    #define ENABLE_LOOSE_TEXTURE_LOADER 1
+#ifdef REFRAMEWORK_UNIVERSAL
+// Universal build targets all games; the TDB>=81 requirement is enforced at
+// runtime inside early_initialize/on_draw_ui via sdk::GameIdentity.
+#define ENABLE_LOOSE_TEXTURE_LOADER 1
+#elif TDB_VER >= 81
+#define ENABLE_LOOSE_TEXTURE_LOADER 1
 #else
-    #define ENABLE_LOOSE_TEXTURE_LOADER 0
+#define ENABLE_LOOSE_TEXTURE_LOADER 0
 #endif
 
 namespace sdk { class ResourceManager; }

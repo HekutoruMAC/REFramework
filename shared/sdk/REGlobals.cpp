@@ -8,6 +8,7 @@
 #include "RETypeDB.hpp"
 #include "REType.hpp"
 #include "RETypes.hpp"
+#include "GameIdentity.hpp"
 
 #include "REGlobals.hpp"
 
@@ -65,8 +66,11 @@ REGlobals::REGlobals() {
         
     }
 
-    // Create a list of getter functions instead
-    if (m_objects.empty() || TDB_VER >= 78) {
+    // Create a list of getter functions instead.
+    // In universal builds, TDB_VER=84 >= 78 is always true at compile time,
+    // so this scan always ran for every game (including DMC5 TDB 67).
+    // The scan is additive — it populates named getters alongside raw pointers.
+    {
         spdlog::info("Usual pattern for REGlobals not working, falling back to scanning for SingletonBehavior types");
 
         auto& types = reframework::get_types();
@@ -75,7 +79,7 @@ REGlobals::REGlobals() {
         size_t i = 0;
 
         for (auto t : type_list) try {
-            auto name = std::string{t->name};
+            auto name = std::string{t->get_type_name()};
 
             if (name.find(game_namespace("SingletonBehavior`1")) != std::string::npos ||
                 name.find(game_namespace("SingletonBehaviorRoot`1")) != std::string::npos ||
@@ -114,8 +118,8 @@ REGlobals::REGlobals() {
         }
     }
 
-    // lets just go through the tdb types
-    if (m_objects.empty() || TDB_VER >= 78) {
+    // Also scan through TDB types for SingletonBehavior inheritance
+    {
         auto tdb = sdk::RETypeDB::get();
 
         for (size_t i = 0; i < tdb->get_num_types(); ++i) try {
@@ -285,11 +289,11 @@ void REGlobals::refresh_natives() {
         }
 
         m_native_singleton_types.push_back(t);
-        m_native_singleton_map[t->name] = t;
+        m_native_singleton_map[t->get_type_name()] = t;
     }
 
     std::sort(m_native_singleton_types.begin(), m_native_singleton_types.end(), [](auto a, auto b) {
-        return std::string{ a->name } < std::string{ b->name };
+        return std::string{ a->get_type_name() } < std::string{ b->get_type_name() };
     });
 }
 
@@ -302,23 +306,23 @@ void REGlobals::refresh_map() {
             continue;
         }
 
-        if (IsBadReadPtr(obj, sizeof(REManagedObject))) {
+        if (IsBadReadPtr(obj, REManagedObject::runtime_size())) {
             continue;
         }
 
-        auto t = utility::re_managed_object::safe_get_type(obj);
+        auto t = obj->safe_get_type();
 
-        if (t == nullptr || t->name == nullptr) {
+        if (t == nullptr || t->get_type_name() == nullptr) {
             continue;
         }
 
         if (m_acknowledged_objects.find(obj_ptr) == m_acknowledged_objects.end()) {
 #ifdef DEVELOPER
-            spdlog::info("{:x}->{:x} ({:s})", (uintptr_t)obj_ptr, (uintptr_t)*obj_ptr, t->name);
+            spdlog::info("{:x}->{:x} ({:s})", (uintptr_t)obj_ptr, (uintptr_t)*obj_ptr, t->get_type_name());
 #endif
             m_acknowledged_objects.insert(obj_ptr);
         }
 
-        m_object_map[t->name] = obj_ptr;
+        m_object_map[t->get_type_name()] = obj_ptr;
     }
 }
