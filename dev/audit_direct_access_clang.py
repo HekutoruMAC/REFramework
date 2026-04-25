@@ -12,7 +12,7 @@ Requirements:
     pip install libclang
 
 Usage:
-    python scripts/audit_direct_access_clang.py [file ...]
+    python dev/audit_direct_access_clang.py [file ...]
     
     If no files given, scans a default set of high-value targets.
 """
